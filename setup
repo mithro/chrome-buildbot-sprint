@@ -1,6 +1,6 @@
 edit /etc/apt/sources.list
 sudo apt-get update
-install git
+sudo apt-get install git
 git clone https://github.com/mithro/chrome-buildbot-sprint.git
 cd chrome-buildbot-sprint
 sudo apt-get -y install g++-arm-linux-gnueabihf
