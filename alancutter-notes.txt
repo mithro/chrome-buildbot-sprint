@@ -1,0 +1,25 @@
+gcloud commands
+
+Create instance:
+$ gcloud compute --project "innate-sunrise-831" instances create "fetch-chromium" --zone "us-central1-a" --machine-type "n1-standard-8" --network "default" --maintenance-policy "MIGRATE" --scopes "https://www.googleapis.com/auth/devstorage.read_only" --image "https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/ubuntu-1404-trusty-v20141212" --boot-disk-type "pd-standard" --boot-disk-device-name "fetch-chromium"
+Created [https://www.googleapis.com/compute/v1/projects/innate-sunrise-831/zones/us-central1-a/instances/fetch-chromium].
+NAME           ZONE          MACHINE_TYPE  INTERNAL_IP   EXTERNAL_IP   STATUS
+fetch-chromium us-central1-a n1-standard-8 10.240.67.107 146.148.90.74 RUNNING
+
+
+SSH into instance:
+gcloud compute --project "innate-sunrise-831" ssh --zone "us-central1-a" "fetch-chromium"
+
+
+Create disk:
+$ gcloud compute --project "innate-sunrise-831" disks create "fetch-chromium-disk" --size "200" --zone "us-central1-a" --type "pd-standard"
+Created [https://www.googleapis.com/compute/v1/projects/innate-sunrise-831/zones/us-central1-a/disks/fetch-chromium-disk].
+NAME                ZONE          SIZE_GB TYPE        STATUS
+fetch-chromium-disk us-central1-a 200     pd-standard READY
+
+
+Attach disk:
+$ gcloud compute --project "innate-sunrise-831" instances attach-disk "fetch-chromium" --disk "fetch-chromium-disk" --zone "us-central1-a"
+Updated [https://www.googleapis.com/compute/v1/projects/innate-sunrise-831/zones/us-central1-a/instances/fetch-chromium].
+
+
