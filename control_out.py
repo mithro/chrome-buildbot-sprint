@@ -8,6 +8,12 @@ import subprocess
 
 BUILD_PLATFORM="linux"
 
+import time
+time_time_orig = time.time
+def reltime(starttime=time_time_orig()):
+  return time_time_orig() - starttime
+time.time = reltime
+
 
 def NoDash(string):
   return string.replace('-', '_')
@@ -18,15 +24,15 @@ def NoDash(string):
 
 # Disk
 def CreateDiskFromSnapshot(disk_name, snapshot_name):
-  subprocess.call(['gcloud', 'compute', 'disks', 'create', disk_name,
+  subprocess.check_call(['gcloud', 'compute', 'disks', 'create', disk_name,
                    '--source-snapshot', snapshot_name])
 
 def SnapshotDisk(disk_name, snapshot_name):
-  subprocess.call(['gcloud', 'compute', 'disks', 'snapshot', disk_name,
+  subprocess.check_call(['gcloud', 'compute', 'disks', 'snapshot', disk_name,
                    '--snapshot-names', snapshot_name])
 
 def DeleteDisk(disk_name):
-  subprocess.call(['gcloud', 'compute', 'disks', 'delete', disk_name,
+  subprocess.check_call(['gcloud', 'compute', 'disks', 'delete', disk_name,
                    '--quiet'])
 
 def DiskExists(disk_name):
@@ -43,27 +49,27 @@ def SnapshotReady(snapshot_name):
 
 
 def DeleteSnapshot(snapshot_name):
-  subprocess.call(['gcloud', 'compute', 'snapshots', 'delete', snapshot_name,
+  subprocess.check_call(['gcloud', 'compute', 'snapshots', 'delete', snapshot_name,
                    '--quiet'])
 
 # Instances
 def RunCommandOnInstance(instance_name, command):
-  return subprocess.call(['gcloud', 'compute', 'ssh', instance_name,
+  subprocess.check_call(['gcloud', 'compute', 'ssh', instance_name,
                    '--command', command])
 
 def InstanceExists(instance_name):
   return 0 == subprocess.call(['gcloud', 'compute', 'instances', 'describe', instance_name], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
 
 def DeleteInstance(instance_name):
-  subprocess.call(['gcloud', 'compute', 'instances', 'delete', instance_name,
+  subprocess.check_call(['gcloud', 'compute', 'instances', 'delete', instance_name,
                    '--quiet'])
 
 def CreateInstanceWithDisks(instance_name, image_name, disks):
   params = ['gcloud', 'compute', 'instances', 'create', instance_name,
             '--image', image_name]
-  for name, mode, mnt in disks:
-    params += ['--disk', 'mode='+mode, 'name='+name, 'device-name='+name]
-  subprocess.call(params)
+  for disk in disks:
+    params += ['--disk', 'mode='+disk.mode, 'name='+disk.name, 'device-name='+disk.name]
+  subprocess.check_call(params)
 
 
 def ShutdownInstance(instance_name):
@@ -79,172 +85,290 @@ def ImageName():
   return 'ubuntu-14-04'
 
 # Naming
-def DiskName(stage, commit):
-  return '-'.join([NoDash(getpass.getuser()), 'disk', NoDash(BUILD_PLATFORM), NoDash(commit), stage])
+def DiskName(stage, commit, content):
+  return '-'.join([NoDash(getpass.getuser()), 'disk', NoDash(BUILD_PLATFORM), NoDash(commit), stage, content])
 
 def InstanceName(stage, commit):
   return '-'.join([NoDash(getpass.getuser()), 'instance', NoDash(BUILD_PLATFORM), NoDash(commit), stage])
 
-def SnapshotName(stage, commit):
-  return '-'.join([NoDash(getpass.getuser()), 'snapshot', NoDash(BUILD_PLATFORM), NoDash(commit), stage])
+def SnapshotName(commit, content):
+  return '-'.join([NoDash(getpass.getuser()), 'snapshot', NoDash(BUILD_PLATFORM), NoDash(commit), content])
 
 
 # --------------------------------------------------------
 
-import time
+import cStringIO as StringIO
 import collections
 import threading
+import traceback
 
-Disk = collections.namedtuple("Disk", ["name","mode","mnt"])
+class Disk(object):
+  def log(self, s, *args):
+    print time.time(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
+
+  def __init__(self, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
+    self.content = content
+    self.commit_id = commit_id
+
+    self.stage = stage
+    self.from_snapshot = from_snapshot
+    self.mode = mode
+    self.save_snapshot = save_snapshot
+
+  @property
+  def name(self):
+    return DiskName(self.stage, self.commit_id, self.content)  
+
+  @property
+  def snapshot_name(self):
+    assert self.save_snapshot
+    return SnapshotName(self.commit_id, self.content)
+
+  @property
+  def mnt(self):
+    return {
+      "src": "/mnt/disk",
+      "out": "/mnt/disk/chromium/src/out",
+    }[self.content]
+
+  def exists(self):
+    return DiskExists(self.name)
+
+  def can_create(self):
+    return SnapshotReady(self.from_snapshot)
+
+  def create(self):
+    self.log("creating disk")
+    assert not self.exists()
+    CreateDiskFromSnapshot(self.name, self.from_snapshot)
+    self.log("created disk")
+
+  def cleanup(self, clear_snapshot=False):
+    if self.exists():
+      DeleteDisk(self.name)
+      self.log("deleted disk")
+
+    if clear_snapshot and self.save_snapshot:
+      if SnapshotReady(self.snapshot_name):
+        DeleteSnapshot(self.snapshot_name)
+        self.log("deleted snapshot %s", self.snapshot_name)
+
+  def save(self):
+    if self.save_snapshot:
+      self.log("creating snapshot %s", self.snapshot_name)
+      SnapshotDisk(self.name, self.snapshot_name)
+      self.log("created snapshot %s", self.snapshot_name)
+
+  def saved(self):
+    if self.save_snapshot:
+      return SnapshotReady(self.snapshot_name)
+    return True
 
 
 class Stage(threading.Thread):
-  def __init__(self, commit_id, wait_for_stage=None):
+  def log(self, s, *args):
+    print time.time(), repr(self), s % args
+
+  @classmethod
+  def name(cls):
+    return cls.__name__.lower()[:-len("stage")]
+
+  def __init__(self, commit_id):
     threading.Thread.__init__(self)
 
-    assert self.STAGE is not None
+    assert self.name() is not Stage.name()
     self.commit_id = commit_id
-    self.result_name = SnapshotName(self.STAGE, self.commit_id)
-    self.instance_name = InstanceName(self.STAGE, self.commit_id)
-
-    self.disks = []
-    self.disk_result = None
-
-    self.wait_for_stage = wait_for_stage
+    self.instance_name = InstanceName(self.name(), self.commit_id)
 
   def __repr__(self):
-    return "%s(%s %s)" % (self.__class__.__name__, self.commit_id, self.wait_for_stage)
+    return "%s(%s)" % (self.name(), self.commit_id)
 
   def can_run(self):
-    return (not self.wait_for_stage) or self.wait_for_stage.done()
+    for disk in self.disks:
+      if not disk.can_create():
+        return False
+    return True
 
   def done(self):
-    return SnapshotReady(self.result_name)
+    for disk in self.disks:
+      if not disk.saved():
+        return False
+    return True
 
   def run(self):
-    assert self.wait_for_stage.done()
-    self.setup_disks()
+    self.log("running")
 
-    assert self.disks
-    assert self.disk_result
-
-    assert not SnapshotReady(self.result_name)
+    # Check we are not already completed or currently running.
+    assert not self.done()
     assert not InstanceExists(self.instance_name)
-    CreateInstanceWithDisks(self.instance_name, ImageName(), self.disks)
 
-    print time.time(), "%s: Created" % self.instance_name
+    disks = self.disks
+    try:
+      for disk in disks:
+        disk.create()
 
-    while True:
-      if RunCommandOnInstance(self.instance_name, "true") == 0:
-        break
-      time.sleep(0.5)
+      # Start up the instance and wait for it to be running.
+      self.log("instance (%s) launching", self.instance_name)
+      CreateInstanceWithDisks(self.instance_name, ImageName(), disks)
+      self.log("instance (%s) launched", self.instance_name)
+      
+      while True:
+        try:
+          RunCommandOnInstance(self.instance_name, "true")
+          break
+        except subprocess.CalledProcessError:
+          time.sleep(0.5)
 
-    print time.time(), "%s: Running" % self.instance_name
+      self.log("instance (%s) running", self.instance_name)
 
-    cmd = ""
-    for disk in self.disks:
-      cmd += """\
+      # Mount the disks into the VM
+      cmd = ""
+      for disk in disks:
+        cmd += """\
 sudo mkdir -p %(mnt)s; \
 sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
 sudo chmod a+rw %(mnt)s; \
-""" % disk.__dict__
-    print time.time(), cmd
-    RunCommandOnInstance(self.instance_name, cmd)
+""" % {"name": disk.name, "mnt": disk.mnt}
+      RunCommandOnInstance(self.instance_name, cmd)
+      self.log("disks mounted")
 
-    print time.time(), "%s: Mounted" % self.instance_name
+      # Running the actual work command
+      self.log("command commence")
+      self.command()
+      self.log("command complete")
 
-    self.command()
+      # Shutdown instance
+      ShutdownInstance(self.instance_name)
+      self.log("instance (%s) terminated", self.instance_name)
 
-    print time.time(), "%s: Command finished" % self.instance_name
+      # Create snapshot
+      for disk in disks:
+        disk.save()
+      self.log("disks saved")
 
-    # Shutdown instance
-    ShutdownInstance(self.instance_name)
+    except Exception, e:
+      tb = StringIO.StringIO()
+      traceback.print_exc(file=tb)
+      self.log("Exception: %s", e)
+      self.log(tb.getvalue())
+      raise
 
-    print time.time(), "%s: Shutdowned" % self.instance_name
+    finally:
+      self.log("finalizing")
 
-    # Create snapshot
-    SnapshotDisk(self.disk_result, self.result_name)
+      # Delete instance
+      if InstanceExists(self.instance_name):
+        DeleteInstance(self.instance_name)
+        self.log("instance (%s) deleted", self.instance_name)
 
-    print time.time(), "%s: Snapshotted" % self.instance_name
-
-    # Delete instance
-    DeleteInstance(self.instance_name)
-
-    print time.time(), "%s: Deleted" % self.instance_name
+      # Cleanup disks
+      for disk in disks:
+        disk.cleanup()
+      self.log("disks deleted")
 
 
 class SyncStage(Stage):
-  STAGE = "src"
+  def __init__(self, commit_id, sync_from):
+    Stage.__init__(self, commit_id)
+    self.sync_from = sync_from
 
-  def setup_disks(self):
-    # Create the disk we'll use to generate the snapshot onto.
-    self.disk_result = DiskName("src", self.commit_id)
-    CreateDiskFromSnapshot(self.disk_result, self.wait_for_stage.result_name)
-    self.disks.append(Disk(name=self.disk_result, mode="rw", mnt="/mnt/disk"))
+  @property
+  def disks(self):
+    return [
+      Disk(
+        content="src",
+        commit_id=self.commit_id,
+        stage=self.name(),
+        from_snapshot=self.sync_from,
+        save_snapshot=True,
+      )
+    ]
 
   def command(self):
-    RunCommandOnInstance(self.instance_name, "sleep 60")
+    RunCommandOnInstance(self.instance_name, "sleep 30")
 
 
 class BuildStage(Stage):
-  STAGE = "out"
-
-  def __init__(self, commit_id, wait_for_stage=None, build_from=None):
-    Stage.__init__(self, commit_id, wait_for_stage)
+  def __init__(self, commit_id, build_from):
+    Stage.__init__(self, commit_id)
     self.build_from = build_from
 
-  def setup_disks(self):
-    # Figure out the src for this commit
-    self.disk_src = DiskName("src", self.commit_id)
-    self.disks.append(Disk(name=self.disk_src, mode="ro", mnt="/mnt/disk"))
+  @property
+  def disks(self):
+    return [
+      # Figure out the src for this commit
+      Disk(
+        content="src",
+        commit_id=self.commit_id,
+        stage=self.name(),
+        from_snapshot=SnapshotName(self.commit_id, "src"),
+        mode="ro",
+      ),
 
-    # Create the disk we'll use to generate the snapshot onto.
-    assert SnapshotReady(self.build_from)
-    self.disk_result = DiskName("out", self.commit_id)
-    CreateDiskFromSnapshot(self.disk_result, self.build_from)
-    self.disks.append(Disk(name=self.disk_result, mode="rw", mnt="/mnt/disk/chromium/src/out"))
+      # Create the disk we'll use to generate the snapshot onto.
+      Disk(
+        content="out",
+        commit_id=self.commit_id,
+        stage=self.name(),
+        from_snapshot=self.build_from,
+        save_snapshot=True,
+      ),
+    ]
 
   def command(self):
-    RunCommandOnInstance(self.instance_name, "sleep 600")
+    RunCommandOnInstance(self.instance_name, "sleep 150")
 
 
 if __name__ == "__main__":
-  # Check t0 base snapshots exist
-  assert DiskExists(DiskName("src", "commit1"))
-  assert SnapshotReady(SnapshotName("src", "commit1"))
-  build_start = SnapshotName("out", "commit0")
-  assert SnapshotReady(build_start), "Snapshot %s doesn't exist" % build_start
-
-  commits = ["commit1", "commit2", "commit3"]
-
-  last_sync = None
+  latest_sync_snapshot = SnapshotName("commit0", "src")
+  latest_build_snapshot = SnapshotName("commit0", "out")
+  assert SnapshotReady(latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
+  assert SnapshotReady(latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
 
   stages = []
-  for c in commits:
-    sync = SyncStage(c, last_sync)
-    build = BuildStage(c, sync, build_from=build_start)
-
-    stages.append(sync)
-    stages.append(build)
-
-    last_sync = sync
+  for c in ["commit1", "commit2", "commit3"]:
+    stages.append(SyncStage(c, sync_from=latest_sync_snapshot))
+    stages.append(BuildStage(c, build_from=latest_build_snapshot))
+    latest_sync_snapshot = SnapshotName(c, "src")
 
   print "---"
+  print "---"
+
   for s in stages:
-    print s, s.can_run()
+    print "Cleaning up", s
+    # Cleanup any leftover instances
+    if InstanceExists(s.instance_name):
+      print time.time(), "Deleting old instance %s" % s.instance_name
+      DeleteInstance(s.instance_name)
+
+    # Clean up any leftover disks from previous runs.
+    for disk in s.disks:
+      disk.cleanup(clear_snapshot=True)
+
+  print "---"
+  print "---"
+
+  for s in stages:
+    print s, s.can_run(), s.done()
+
+  print "---"
   print "---"
 
   raw_input("Run things? [y]")
 
   while stages:
     finished_stages = [s for s in stages if s.done()]
-    print time.time(), "Finished", finished_stages
-    stages = [s for s in stages if not s in finished_stages]
+    if finished_stages:
+      print time.time(), "Finished", finished_stages
+      stages = [s for s in stages if not s in finished_stages]
 
     for stage in stages:
       if stage.can_run() and not stage.is_alive():
         if not stage.done():
           print time.time(), "Starting", stage
           stage.start()
+
+      if stage.is_alive():
+        print time.time(), "Currently running", stage
 
     time.sleep(1)

@@ -46,7 +46,6 @@ def LaunchInstances(commit_ids, instance_type, base_type):
         else:
             InstanceStart(instance_type, commit_id, from_snapshot=(base_type, previous_commit_id))
 
-
 while True:
     json = urllib.urlopen("https://chromium.googlesource.com/chromium/src/+log/master?format=json").read()
     json = "\n".join(json.splitlines()[1:])
@@ -87,4 +86,3 @@ while True:
         for mtype in instances:
             print "%s %i" % (mtype, len(instances[mtype])), 
         print
-
