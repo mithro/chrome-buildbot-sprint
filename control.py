@@ -7,6 +7,9 @@ DISK_DEVICE_NAME_SRC = 'chromium-src'
 DISK_DEVICE_NAME_OUT = 'chromium-out'
 
 
+def SnapshotExists(snapshot_name):
+  return 0 == subprocess.call(['gcloud', 'compute', 'snapshots', 'describe', snapshot_name])
+
 def CreateDiskFromSnapshot(disk_name, snapshot_name):
   subprocess.call(['gcloud', 'compute', 'disks', 'create', disk_name,
                    '--source-snapshot', snapshot_name])
@@ -24,12 +27,16 @@ def DeleteSnapshot(snapshot_name):
                    '--quiet'])
 
 
+def InstanceExists(instance_name):
+  return 0 == subprocess.call(['gcloud', 'compute', 'instances', 'describe', instance_name])
+
+
 def CreateInstanceWithDisks(instance_name, image_name, src_disk=None, out_disk=None):
   params = ['gcloud', 'compute', 'instances', 'create', instance_name,
             '--image', image_name]
   if (src_disk):
     params += ['--disk', 'name=' + src_disk, 'device-name=' + DISK_DEVICE_NAME_SRC]
-  if (out_disk:
+  if (out_disk):
     params += ['--disk', 'name=' + out_disk, 'device-name=' + DISK_DEVICE_NAME_OUT]
   subprocess.call(params)
 
