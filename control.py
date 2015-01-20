@@ -81,17 +81,40 @@ def SnapshotName(stage, commit, build_platform):
 def ImageName():
   return 'ubuntu-14-04'
 
-def UpdateAndBuild(target_stage, target_commit, from_snapshot, build_platform):
-  from_stage, from_commit = from_snapshot
-
+def UpdateAndBuild(target_stage, target_commit, from_commit, build_platform):
   if target_stage == 'src':
-    src_disk_name = DiskName(target_stage, target_commit, build_platform)
-    CreateDiskFromSnapshot(src_disk_name, SnapshotName(from_stage, from_commit, build_platform))
-    instance_name = InstanceName(target_stage, target_commit, build_platform)
+    src_disk_name = DiskName('src', target_commit, build_platform)
+    CreateDiskFromSnapshot(src_disk_name, SnapshotName('src', from_commit, build_platform))
+    instance_name = InstanceName('src', target_commit, build_platform)
     CreateInstanceWithDisks(instance_name, ImageName(), src_disk=src_disk_name)
     MountChromiumDisks(instance_name, True, False)
     RunCommandOnInstance(instance_name, 'ls chromium')
     RunCommandOnInstance(instance_name, 'touch chromium/something')
     UnmountChromiumDisks(instance_name, True, False)
-    SnapshotDisk(src_disk_name, SnapshotName(target_stage, target_commit, build_platform))
+    SnapshotDisk(src_disk_name, SnapshotName('src', target_commit, build_platform))
+    DeleteInstance(instance_name)
+    # Don't delete disk, 'build' stage will use it read-only.
+
+  if target_stage == 'build':
+    src_disk_name = DiskName('src', target_commit, build_platform)
+    out_disk_name = DiskName('build', target_commit, build_platform)
+    CreateDiskFromSnapshot(out_disk_name, SnapshotName('build', target_commit, build_platform))
+    instance_name = InstanceName('build', target_commit, build_platform)
+    CreateInstanceWithDisks(instance_name, ImageName(), src_disk=src_disk_name, out_disk=out_disk_name)
+    MountChromiumDisks(instance_name, True, True)
+    RunCommandOnInstance(instance_name, 'ls chromium')
+    RunCommandOnInstance(instance_name, 'touch chromium/something')
+    UnmountChromiumDisks(instance_name, True, True)
+    SnapshotDisk(out_disk_name, SnapshotName('build', target_commit, build_platform))
+    DeleteInstance(instance_name)
+    # Don't delete disk, 'test' stage will use it read-only.
+
+  if target_stage == 'test':
+    out_disk_name = DiskName('test', target_commit, build_platform)
+    instance_name = InstanceName('test', target_commit, build_platform)
+    CreateInstanceWithDisks(instance_name, ImageName(), out_disk=out_disk_name)
+    MountChromiumDisks(instance_name, False, True)
+    RunCommandOnInstance(instance_name, 'ls chromium')
+    RunCommandOnInstance(instance_name, 'touch chromium/something')
+    UnmountChromiumDisks(instance_name, False, True)
     DeleteInstance(instance_name)
