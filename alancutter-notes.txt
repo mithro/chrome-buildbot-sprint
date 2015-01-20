@@ -23,3 +23,14 @@ $ gcloud compute --project "innate-sunrise-831" instances attach-disk "fetch-chr
 Updated [https://www.googleapis.com/compute/v1/projects/innate-sunrise-831/zones/us-central1-a/instances/fetch-chromium].
 
 
+Mount disk:
+$ sudo mkdir /mnt/chromium
+$ sudo chmod a+rw /mnt/chromium
+$ sudo /usr/share/google/safe_format_and_mount /dev/sdb /mnt/chromium
+grep: /etc/redhat-release: No such file or directory
+grep: /etc/redhat-release: No such file or directory
+safe_format_and_mount: Running: fsck.ext4 -a /dev/sdb
+safe_format_and_mount: /dev/sdb: clean, 11/13107200 files, 870549/52428800 blocks
+safe_format_and_mount: Running: mount -o discard,defaults /dev/sdb /mnt/chromium
+
+
