@@ -1,0 +1,5 @@
+
+On a n1-standard-8 (8 vCPU, 30 GB memory) - no SSD
+time fetch chromium 
+real    18m34.923s
+
