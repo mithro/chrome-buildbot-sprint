@@ -132,6 +132,64 @@ import collections
 import threading
 import traceback
 
+class Instance(object):
+  def log(self, s, *args):
+    print time.time(), "%s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
+
+  def __init__(self, stage, commit_id):
+    self.stage = stage
+    self.commit_id = commit_id
+
+  @property
+  def name(self):
+    return InstanceName(self.stage, self.commit_id)
+
+  def launch(self, disks):
+    self.log("launching")
+    CreateInstanceWithDisks(self.name, ImageName(), disks)
+    self.disks = disks
+    self.log("launched", self.name)
+
+  def run(self, command):
+    self.log("running %r", command)
+    return RunCommandOnInstance(self.name, command)
+
+  def wait_until_ready(self):
+    while True:
+      try:
+        self.run("true")
+        break
+      except subprocess.CalledProcessError:
+        self.log("waiting")
+        time.sleep(0.5)
+    self.log("running")
+
+  def mount_disks(self):
+    # Mount the disks into the VM
+    cmd = ""
+    for disk in self.disks:
+      cmd += """\
+sudo mkdir -p %(mnt)s; \
+sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
+sudo chmod a+rw %(mnt)s; \
+""" % {"name": disk.name, "mnt": disk.mnt}
+    self.run(cmd)
+    self.log("disks mounted")
+
+  def exists(self):
+    return InstanceExists(self.name)
+
+  def shutdown(self):
+    self.log("shutting down")
+    ShutdownInstance(self.name)
+    self.log("shutdown")
+
+  def delete(self):
+    self.log("deleting")
+    DeleteInstance(self.instance_name)
+    self.log("deleted")
+
+
 class Disk(object):
   def log(self, s, *args):
     print time.time(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
@@ -233,43 +291,16 @@ class Stage(threading.Thread):
     assert not InstanceExists(self.instance_name)
 
     disks = self.disks
+    instance = self.instance
     try:
       for disk in disks:
         disk.create()
 
-      # Start up the instance and wait for it to be running.
-      self.log("instance (%s) launching", self.instance_name)
-      CreateInstanceWithDisks(self.instance_name, ImageName(), disks)
-      self.log("instance (%s) launched", self.instance_name)
-
-      while True:
-        try:
-          RunCommandOnInstance(self.instance_name, "true")
-          break
-        except subprocess.CalledProcessError:
-          time.sleep(0.5)
-
-      self.log("instance (%s) running", self.instance_name)
-
-      # Mount the disks into the VM
-      cmd = ""
-      for disk in disks:
-        cmd += """\
-sudo mkdir -p %(mnt)s; \
-sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
-sudo chmod a+rw %(mnt)s; \
-""" % {"name": disk.name, "mnt": disk.mnt}
-      RunCommandOnInstance(self.instance_name, cmd)
-      self.log("disks mounted")
-
-      # Running the actual work command
-      self.log("command commence")
-      self.command()
-      self.log("command complete")
-
-      # Shutdown instance
-      ShutdownInstance(self.instance_name)
-      self.log("instance (%s) terminated", self.instance_name)
+      instance.launch(disks)
+      instance.wait_until_ready()
+      instance.mount_disks()
+      self.command(instance)
+      instance.shutdown()
 
       # Create snapshot
       for disk in disks:
@@ -287,9 +318,9 @@ sudo chmod a+rw %(mnt)s; \
       self.log("finalizing")
 
       # Delete instance
-      if InstanceExists(self.instance_name):
-        DeleteInstance(self.instance_name)
-        self.log("instance (%s) deleted", self.instance_name)
+      if instance.exists():
+        instance.delete()
+      self.log("instance deleted")
 
       # Cleanup disks
       for disk in disks:
@@ -314,8 +345,8 @@ class SyncStage(Stage):
       )
     ]
 
-  def command(self):
-    RunCommandOnInstance(self.instance_name, "sleep 30")
+  def command(self, instance):
+    instance.run("sleep 30")
 
 
 class BuildStage(Stage):
@@ -346,7 +377,7 @@ class BuildStage(Stage):
     ]
 
   def command(self):
-    RunCommandOnInstance(self.instance_name, "sleep 150")
+    instance.run("sleep 150")
 
 
 
@@ -374,9 +405,9 @@ if __name__ == "__main__":
   for s in stages:
     print "Cleaning up", s
     # Cleanup any leftover instances
-    if InstanceExists(s.instance_name):
-      print time.time(), "Deleting old instance %s" % s.instance_name
-      DeleteInstance(s.instance_name)
+    instance = stage.instance()
+    if instance.exists():
+      instance.delete()
 
     # Clean up any leftover disks from previous runs.
     for disk in s.disks:
