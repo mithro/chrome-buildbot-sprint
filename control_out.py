@@ -113,6 +113,15 @@ def InstanceExists(instance_name):
     return instance_name in cached_status['instances']
   return 0 == subprocess.call(GcloudCommand(['instances', 'describe', instance_name]), stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
 
+def InstanceRunning(instance_name):
+  if USE_LOCAL_CACHE:
+    return cached_status['instances'].get(instance_name) == 'RUNNING'
+  try:
+    output = subprocess.check_output(GcloudCommand(['instances', 'describe', instance_name]), stderr=subprocess.STDOUT)
+  except subprocess.CalledProcessError:
+    return False
+  return "status: RUNNING" in output
+
 def DeleteInstance(instance_name):
   subprocess.check_call(GcloudCommand(['instances', 'delete', instance_name,
                    '--quiet']))
@@ -131,7 +140,7 @@ def CreateInstanceWithDisks(instance_name, image_name, machine_type, disks):
 
 def ShutdownInstance(instance_name):
   RunCommandOnInstance(instance_name, "sudo shutdown -h now")
-  while InstanceExists(instance_name):
+  while InstanceRunning(instance_name):
     time.sleep(1)
 
 # --------------------------------------------------------
