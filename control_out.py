@@ -7,6 +7,7 @@ import getpass
 import subprocess
 import sys
 
+USE_LOCAL_CACHE = True
 BUILD_PLATFORM="linux"
 BOOT_DISK_TYPE = 'pd-ssd'
 GCE_PROJECT = 'delta-trees-830'
@@ -36,7 +37,7 @@ def GcloudCommand(args, suppress_zone=False):
   cmd = ['gcloud', 'compute'] + args + ['--project=%s' % GCE_PROJECT]
   if not suppress_zone:
     cmd += ['--zone=%s' % GCE_ZONE]
-  # print time.time(), 'GCE command:', ' '.join(cmd)
+  print time.time(), 'GCE command:', ' '.join(cmd)
   return cmd
 
 # Disk
@@ -53,16 +54,19 @@ def DeleteDisk(disk_name):
                    '--quiet']))
 
 def DiskExists(disk_name):
+  if USE_LOCAL_CACHE:
+    return disk_name in local_cached_disks
   return 0 == subprocess.call(GcloudCommand(['disks', 'describe', disk_name]), stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
 
 # Snapshots
 def SnapshotReady(snapshot_name):
+  if USE_LOCAL_CACHE:
+    return snapshot_name in local_cached_ready_snapshots
   try:
     output = subprocess.check_output(GcloudCommand(['snapshots', 'describe', snapshot_name], suppress_zone=True), stderr=subprocess.STDOUT)
   except subprocess.CalledProcessError:
     return False
   return "status: READY" in output
-  #return 0 == subprocess.call(, stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
 
 
 def DeleteSnapshot(snapshot_name):
@@ -75,6 +79,8 @@ def RunCommandOnInstance(instance_name, command):
                    '--command', command]))
 
 def InstanceExists(instance_name):
+  if USE_LOCAL_CACHE:
+    return instance_name in local_cached_instances
   return 0 == subprocess.call(GcloudCommand(['instances', 'describe', instance_name]), stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
 
 def DeleteInstance(instance_name):
@@ -118,9 +124,37 @@ def SnapshotName(commit, content):
 
 # --------------------------------------------------------
 
-local_cached_ready_instances = []
-local_cached_ready_disks = []
+local_cached_instances = []
+local_cached_disks = []
 local_cached_ready_snapshots = []
+def update_local_caches():
+  print time.time(), 'Updading local caches'
+  update_local_instances_cache()
+  update_local_disks_cache()
+  update_local_snapshots_cache()
+  print time.time(), 'Local cache state:'
+  print 'Instances:\n\t', '\n\t'.join(local_cached_instances)
+  print 'Disks:\n\t', '\n\t'.join(local_cached_disks)
+  print 'Ready Snapshots:\n\t', '\n\t'.join(local_cached_ready_snapshots)
+
+def update_local_instances_cache():
+  global local_cached_instances
+  lines = [line.split() for line in subprocess.check_output(GcloudCommand(['instances', 'list'])).split('\n') if line]
+  assert lines[0][0] == 'NAME'
+  local_cached_instances = [line[0] for line in lines[1:]]
+
+def update_local_disks_cache():
+  global local_cached_disks
+  lines = [line.split() for line in subprocess.check_output(GcloudCommand(['disks', 'list'])).split('\n') if line]
+  assert lines[0][0] == 'NAME'
+  local_cached_disks = [line[0] for line in lines[1:]]
+
+def update_local_snapshots_cache():
+  global local_cached_ready_snapshots
+  lines = [line.split() for line in subprocess.check_output(GcloudCommand(['snapshots', 'list'], suppress_zone=True)).split('\n') if line]
+  assert lines[0][0] == 'NAME'
+  assert lines[0][3] == 'STATUS'
+  local_cached_ready_snapshots = [line[0] for line in lines[1:] if line[3] == 'READY']
 
 # --------------------------------------------------------
 
@@ -253,7 +287,7 @@ class Stage(threading.Thread):
       for disk in disks:
         cmd += """\
 mkdir -p %(mnt)s; \
-sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s \
+sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
 """ % {"name": disk.name, "mnt": disk.mnt}
       RunCommandOnInstance(self.instance_name, cmd)
       self.log("disks mounted")
@@ -369,6 +403,8 @@ if __name__ == "__main__":
   ]
   latest_sync_snapshot = SnapshotName(latest_commit_id, "src")
   latest_build_snapshot = SnapshotName(latest_commit_id, "out")
+
+  update_local_caches()
   assert SnapshotReady(latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
   assert SnapshotReady(latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
 
@@ -395,6 +431,7 @@ if __name__ == "__main__":
   print "---"
   print "---"
 
+  update_local_caches()
   for s in stages:
     print s, s.can_run(), s.done()
 
@@ -404,6 +441,9 @@ if __name__ == "__main__":
   raw_input("Run things? [Y/y]")
 
   while stages:
+    print time.time(), 'Main loop iteration'
+
+    update_local_caches()
     finished_stages = [s for s in stages if s.done()]
     if finished_stages:
       print time.time(), "Finished", finished_stages
@@ -418,4 +458,4 @@ if __name__ == "__main__":
       if stage.is_alive():
         print time.time(), "Currently running", stage
 
-    time.sleep(1)
+    time.sleep(60)
