@@ -5,8 +5,10 @@
 
 import getpass
 import subprocess
+import sys
 
 BUILD_PLATFORM="linux"
+BOOT_DISK_TYPE = 'pd-ssd'
 GCE_PROJECT = 'delta-trees-830'
 GCE_PROJECT_FLAG = '--project=%s' % GCE_PROJECT
 GCE_ZONE = 'us-central1-a'
@@ -79,9 +81,13 @@ def DeleteInstance(instance_name):
   subprocess.check_call(GcloudCommand(['instances', 'delete', instance_name,
                    '--quiet']))
 
-def CreateInstanceWithDisks(instance_name, image_name, disks):
-  params = ['instances', 'create', instance_name,
-            '--image', image_name]
+def CreateInstanceWithDisks(instance_name, image_name, machine_type, disks):
+  params = [
+    'instances', 'create', instance_name,
+    '--image=%s' % image_name,
+    '--machine-type=%s' % machine_type,
+    '--boot-disk-type=%s' % BOOT_DISK_TYPE,
+  ]
   for disk in disks:
     params += ['--disk', 'mode='+disk.mode, 'name='+disk.name, 'device-name='+disk.name]
   subprocess.check_call(GcloudCommand(params))
@@ -230,7 +236,7 @@ class Stage(threading.Thread):
 
       # Start up the instance and wait for it to be running.
       self.log("instance (%s) launching", self.instance_name)
-      CreateInstanceWithDisks(self.instance_name, ImageName(), disks)
+      CreateInstanceWithDisks(self.instance_name, ImageName(), self.machine_type, disks)
       self.log("instance (%s) launched", self.instance_name)
       
       while True:
@@ -271,25 +277,28 @@ sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s \
       traceback.print_exc(file=tb)
       self.log("Exception: %s", e)
       self.log(tb.getvalue())
-      raise
+      sys.exit(1)
 
-    finally:
-      self.log("finalizing")
-      # Delete instance
-      if InstanceExists(self.instance_name):
-        DeleteInstance(self.instance_name)
-        self.log("instance (%s) deleted", self.instance_name)
+    self.log("finalizing")
+    # Delete instance
+    if InstanceExists(self.instance_name):
+      DeleteInstance(self.instance_name)
+      self.log("instance (%s) deleted", self.instance_name)
 
-      # Cleanup disks
-      for disk in disks:
-        disk.cleanup()
-      self.log("disks deleted")
+    # Cleanup disks
+    for disk in disks:
+      disk.cleanup()
+    self.log("disks deleted")
 
 
 class SyncStage(Stage):
   def __init__(self, commit_id, sync_from):
     Stage.__init__(self, commit_id)
     self.sync_from = sync_from
+
+  @property
+  def machine_type(self):
+    return 'n1-standard-2'
 
   @property
   def disks(self):
@@ -315,6 +324,10 @@ class BuildStage(Stage):
   def __init__(self, commit_id, build_from):
     Stage.__init__(self, commit_id)
     self.build_from = build_from
+
+  @property
+  def machine_type(self):
+    return 'n1-standard-16'
 
   @property
   def disks(self):
