@@ -40,76 +40,21 @@ SSH_KEY_PATH = '../gce_bot_rsa'
 STARTUP_SCRIPT = 'startup_script.sh'
 
 ComputeEngine = get_driver(Provider.GCE)
-DRIVER = ComputeEngine(SERVICE_ACCOUNT_EMAIL,
+def new_driver():
+  return ComputeEngine(SERVICE_ACCOUNT_EMAIL,
                        SERVICE_ACCOUNT_KEY_PATH,
                        datacenter=ZONE,
                        project=PROJECT_ID,
                        auth_type='SA',
                        scopes=SCOPES)
 
-# Disk
-def CreateDiskFromSnapshot(disk_name, snapshot_name):
-  DRIVER.create_volume(size=None, name=disk_name, snapshot=snapshot_name, ex_disk_type='pd-ssd')
-
-def SnapshotDisk(disk_name, snapshot_name):
-  volume = DRIVER.ex_get_volume(disk_name)
-  DRIVER.create_volume_snapshot(volume, snapshot_name)
-
-def DeleteDisk(disk_name):
-  DRIVER.destroy_volume(DRIVER.ex_get_volume(disk_name))
-
-def DiskExists(disk_name):
-  try:
-    DRIVER.ex_get_volume(disk_name)
-    return True
-  except ResourceNotFoundError:
-    return False
-
 # Snapshots
-def SnapshotReady(snapshot_name):
+def SnapshotReady(driver, snapshot_name):
   try:
-    DRIVER.ex_get_snapshot(snapshot_name)
+    driver.ex_get_snapshot(snapshot_name)
     return True
   except ResourceNotFoundError:
     return False
-
-def DeleteSnapshot(snapshot_name):
-  DRIVER.destroy_volume_snapshot(DRIVER.ex_get_snapshot(snapshot_name))
-
-# Instances
-def RunCommandOnInstance(instance_name, command):
-  node = DRIVER.ex_get_node(instance_name)
-  ssh = SSHClient(node.public_ips[0], username='ubuntu', key=SSH_KEY_PATH)
-  ssh.connect()
-  stdout, stderr, returncode = ssh.run(command)
-  ssh.close()
-  if returncode != 0:
-    raise subprocess.CalledProcessError(returncode, command, stdout + stderr)
-
-def InstanceExists(instance_name):
-  try:
-    DRIVER.ex_get_node(instance_name)
-    return True
-  except ResourceNotFoundError:
-    return False
-
-def DeleteInstance(instance_name):
-  DRIVER.destroy_node(DRIVER.ex_get_node(instance_name))
-
-def CreateInstanceWithDisks(instance_name, image_name, disks=[]):
-  node = DRIVER.deploy_node(instance_name, size=MACHINE_SIZE, image=image_name, script=STARTUP_SCRIPT)
-  for disk in disks:
-    DRIVER.attach_volume(node, DRIVER.ex_get_volume(disk.name), disk.name, disk.mode)
-
-def ShutdownInstance(instance_name):
-  RunCommandOnInstance(instance_name, "sudo shutdown -h now")
-  try:
-    while DRIVER.ex_get_node(instance_name).state == 'RUNNING':
-      pass
-  except ResourceNotFoundError:
-    pass
-
-# --------------------------------------------------------
 
 def ImageName():
   return 'ubuntu-14-04'
@@ -136,7 +81,8 @@ class Instance(object):
   def log(self, s, *args):
     print time.time(), "%s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
 
-  def __init__(self, stage, commit_id):
+  def __init__(self, driver, stage, commit_id):
+    self.driver = driver
     self.stage = stage
     self.commit_id = commit_id
 
@@ -144,15 +90,30 @@ class Instance(object):
   def name(self):
     return InstanceName(self.stage, self.commit_id)
 
+  def exists(self):
+    try:
+      self.driver.ex_get_node(self.name)
+      return True
+    except ResourceNotFoundError:
+      return False
+
   def launch(self, disks):
     self.log("launching")
-    CreateInstanceWithDisks(self.name, ImageName(), disks)
+    node = self.driver.deploy_node(self.name, size=MACHINE_SIZE, image=image_name, script=STARTUP_SCRIPT)
+    for disk in disks:
+      self.driver.attach_volume(node, self.driver.ex_get_volume(disk.name), disk.name, disk.mode)
     self.disks = disks
     self.log("launched", self.name)
 
   def run(self, command):
     self.log("running %r", command)
-    return RunCommandOnInstance(self.name, command)
+    node = self.driver.ex_get_node(self.name)
+    ssh = SSHClient(node.public_ips[0], username='ubuntu', key=SSH_KEY_PATH)
+    ssh.connect()
+    stdout, stderr, returncode = ssh.run(command)
+    ssh.close()
+    if returncode != 0:
+      raise subprocess.CalledProcessError(returncode, command, stdout + stderr)
 
   def wait_until_ready(self):
     while True:
@@ -176,17 +137,20 @@ sudo chmod a+rw %(mnt)s; \
     self.run(cmd)
     self.log("disks mounted")
 
-  def exists(self):
-    return InstanceExists(self.name)
-
   def shutdown(self):
     self.log("shutting down")
-    ShutdownInstance(self.name)
+    self.run("sudo shutdown -h now")
+    try:
+      while self.driver.ex_get_node(self.name).state == 'RUNNING':
+        time.sleep(0.5)
+        pass
+    except ResourceNotFoundError:
+      pass
     self.log("shutdown")
 
   def delete(self):
     self.log("deleting")
-    DeleteInstance(self.instance_name)
+    self.driver.destroy_node(self.driver.ex_get_node(self.name))
     self.log("deleted")
 
 
@@ -194,7 +158,9 @@ class Disk(object):
   def log(self, s, *args):
     print time.time(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
 
-  def __init__(self, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
+  def __init__(self, driver, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
+    self.driver = driver
+
     self.content = content
     self.commit_id = commit_id
 
@@ -220,36 +186,41 @@ class Disk(object):
     }[self.content]
 
   def exists(self):
-    return DiskExists(self.name)
+    try:
+      self.driver.ex_get_volume(self.name)
+      return True
+    except ResourceNotFoundError:
+      return False
 
   def can_create(self):
-    return SnapshotReady(self.from_snapshot)
+    return SnapshotReady(self.driver, self.from_snapshot)
 
   def create(self):
     self.log("creating disk")
     assert not self.exists()
-    CreateDiskFromSnapshot(self.name, self.from_snapshot)
+    self.driver.create_volume(size=None, name=self.name, snapshot=self.from_snapshot, ex_disk_type='pd-ssd')
     self.log("created disk")
 
   def cleanup(self, clear_snapshot=False):
     if self.exists():
-      DeleteDisk(self.name)
+      self.driver.destroy_volume(self.driver.ex_get_volume(self.name))
       self.log("deleted disk")
 
     if clear_snapshot and self.save_snapshot:
-      if SnapshotReady(self.snapshot_name):
-        DeleteSnapshot(self.snapshot_name)
+      if SnapshotReady(self.driver, self.snapshot_name):
+        self.driver.destroy_volume_snapshot(self.driver.ex_get_snapshot(self.snapshot_name))
         self.log("deleted snapshot %s", self.snapshot_name)
 
   def save(self):
     if self.save_snapshot:
       self.log("creating snapshot %s", self.snapshot_name)
-      SnapshotDisk(self.name, self.snapshot_name)
+      volume = self.driver.ex_get_volume(self.name)
+      self.driver.create_volume_snapshot(volume, self.snapshot_name)
       self.log("created snapshot %s", self.snapshot_name)
 
   def saved(self):
     if self.save_snapshot:
-      return SnapshotReady(self.snapshot_name)
+      return SnapshotReady(self.driver, self.snapshot_name)
     return True
 
 
@@ -266,32 +237,34 @@ class Stage(threading.Thread):
 
     assert self.name() is not Stage.name()
     self.commit_id = commit_id
-    self.instance_name = InstanceName(self.name(), self.commit_id)
 
   def __repr__(self):
     return "%s(%s)" % (self.name(), self.commit_id)
 
-  def can_run(self):
-    for disk in self.disks:
+  def can_run(self, driver):
+    for disk in self.disks(driver):
       if not disk.can_create():
         return False
     return True
 
-  def done(self):
-    for disk in self.disks:
+  def done(self, driver):
+    for disk in self.disks(driver):
       if not disk.saved():
         return False
     return True
 
+  def instance(self, driver):
+    return Instance(driver, self.name(), self.commit_id)
+
   def run(self):
+    driver = new_driver()
+
     self.log("running")
+    assert not self.done(driver)
 
-    # Check we are not already completed or currently running.
-    assert not self.done()
-    assert not InstanceExists(self.instance_name)
-
-    disks = self.disks
-    instance = self.instance
+    disks = self.disks(driver)
+    instance = self.instance(driver)
+    assert not instance.exists()
     try:
       for disk in disks:
         disk.create()
@@ -333,10 +306,10 @@ class SyncStage(Stage):
     Stage.__init__(self, commit_id)
     self.sync_from = sync_from
 
-  @property
-  def disks(self):
+  def disks(self, driver):
     return [
       Disk(
+        driver=driver,
         content="src",
         commit_id=self.commit_id,
         stage=self.name(),
@@ -354,11 +327,11 @@ class BuildStage(Stage):
     Stage.__init__(self, commit_id)
     self.build_from = build_from
 
-  @property
-  def disks(self):
+  def disks(self, driver):
     return [
       # Figure out the src for this commit
       Disk(
+        driver=driver,
         content="src",
         commit_id=self.commit_id,
         stage=self.name(),
@@ -368,6 +341,7 @@ class BuildStage(Stage):
 
       # Create the disk we'll use to generate the snapshot onto.
       Disk(
+        driver=driver,
         content="out",
         commit_id=self.commit_id,
         stage=self.name(),
@@ -386,12 +360,13 @@ def get_commits_fake():
 
 
 if __name__ == "__main__":
+  driver = new_driver()
   commits = get_commits_fake()
 
   latest_sync_snapshot = SnapshotName(commits[0], "src")
   latest_build_snapshot = SnapshotName(commits[0], "out")
-  assert SnapshotReady(latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
-  assert SnapshotReady(latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
+  assert SnapshotReady(driver, latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
+  assert SnapshotReady(driver, latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
 
   stages = []
   for c in commits[1:]:
@@ -405,19 +380,19 @@ if __name__ == "__main__":
   for s in stages:
     print "Cleaning up", s
     # Cleanup any leftover instances
-    instance = stage.instance()
+    instance = stage.instance(driver)
     if instance.exists():
       instance.delete()
 
     # Clean up any leftover disks from previous runs.
-    for disk in s.disks:
+    for disk in s.disks(driver):
       disk.cleanup(clear_snapshot=True)
 
   print "---"
   print "---"
 
   for s in stages:
-    print s, s.can_run(), s.done()
+    print s, s.can_run(driver), s.done(driver)
 
   print "---"
   print "---"
@@ -425,14 +400,14 @@ if __name__ == "__main__":
   raw_input("Run things? [y]")
 
   while stages:
-    finished_stages = [s for s in stages if s.done()]
+    finished_stages = [s for s in stages if s.done(driver)]
     if finished_stages:
       print time.time(), "Finished", finished_stages
       stages = [s for s in stages if not s in finished_stages]
 
     for stage in stages:
-      if stage.can_run() and not stage.is_alive():
-        if not stage.done():
+      if stage.can_run(driver) and not stage.is_alive():
+        if not stage.done(driver):
           print time.time(), "Starting", stage
           stage.start()
 
