@@ -128,10 +128,13 @@ local_cached_instances = []
 local_cached_disks = []
 local_cached_ready_snapshots = []
 def update_local_caches():
-  print time.time(), 'Updading local caches'
+  print time.time(), 'Updating local caches'
   update_local_instances_cache()
   update_local_disks_cache()
   update_local_snapshots_cache()
+  print time.time(), 'Local caches updated'
+
+def print_local_caches():
   print time.time(), 'Local cache state:'
   print 'Instances:\n\t', '\n\t'.join(local_cached_instances)
   print 'Disks:\n\t', '\n\t'.join(local_cached_disks)
@@ -405,6 +408,8 @@ if __name__ == "__main__":
   latest_build_snapshot = SnapshotName(latest_commit_id, "out")
 
   update_local_caches()
+  print_local_caches()
+
   assert SnapshotReady(latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
   assert SnapshotReady(latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
 
@@ -444,6 +449,8 @@ if __name__ == "__main__":
     print time.time(), 'Main loop iteration'
 
     update_local_caches()
+    print_local_caches()
+
     finished_stages = [s for s in stages if s.done()]
     if finished_stages:
       print time.time(), "Finished", finished_stages
