@@ -34,7 +34,7 @@ def GcloudCommand(args, suppress_zone=False):
   cmd = ['gcloud', 'compute'] + args + ['--project=%s' % GCE_PROJECT]
   if not suppress_zone:
     cmd += ['--zone=%s' % GCE_ZONE]
-  print time.time(), 'GCE command:', ' '.join(cmd)
+  # print time.time(), 'GCE command:', ' '.join(cmd)
   return cmd
 
 # Disk
@@ -44,7 +44,7 @@ def CreateDiskFromSnapshot(disk_name, snapshot_name):
 
 def SnapshotDisk(disk_name, snapshot_name):
   subprocess.check_call(GcloudCommand(['disks', 'snapshot', disk_name,
-                   '--snapshot-names', snapshot_name], suppress_zone=True))
+                   '--snapshot-names', snapshot_name]))
 
 def DeleteDisk(disk_name):
   subprocess.check_call(GcloudCommand(['disks', 'delete', disk_name,
@@ -69,7 +69,7 @@ def DeleteSnapshot(snapshot_name):
 
 # Instances
 def RunCommandOnInstance(instance_name, command):
-  subprocess.check_call(GcloudCommand(['ssh', instance_name,
+  subprocess.check_call(GcloudCommand(['ssh', 'ubuntu@' + instance_name,
                    '--command', command]))
 
 def InstanceExists(instance_name):
@@ -97,7 +97,7 @@ def ShutdownInstance(instance_name):
 # --------------------------------------------------------
 
 def ImageName():
-  return 'ubuntu-14-04'
+  return 'boot-image-wip'
 
 # Naming
 def DiskName(stage, commit, content):
@@ -109,6 +109,12 @@ def InstanceName(stage, commit):
 def SnapshotName(commit, content):
   return '-'.join([NoDash(getpass.getuser()), 'snapshot', NoDash(BUILD_PLATFORM), NoDash(commit), content])
 
+
+# --------------------------------------------------------
+
+local_cached_ready_instances = []
+local_cached_ready_disks = []
+local_cached_ready_snapshots = []
 
 # --------------------------------------------------------
 
@@ -269,7 +275,6 @@ sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s \
 
     finally:
       self.log("finalizing")
-
       # Delete instance
       if InstanceExists(self.instance_name):
         DeleteInstance(self.instance_name)
@@ -299,7 +304,7 @@ class SyncStage(Stage):
     ]
 
   def command(self):
-    RunCommandOnInstance(self.instance_name, '&&'.join([
+    RunCommandOnInstance(self.instance_name, ' && '.join([
       SHARED_COMMANDS['depot_tools_path'],
       'cd chromium/src',
       'time gclient sync -r ' + self.commit_id,
@@ -334,7 +339,7 @@ class BuildStage(Stage):
     ]
 
   def command(self):
-    RunCommandOnInstance(self.instance_name, '&&'.join([
+    RunCommandOnInstance(self.instance_name, ' && '.join([
       SHARED_COMMANDS['depot_tools_path'],
       'cd chromium/src',
       'time build/gyp_chromium',
@@ -383,7 +388,7 @@ if __name__ == "__main__":
   print "---"
   print "---"
 
-  raw_input("Run things? [y]")
+  raw_input("Run things? [Y/y]")
 
   while stages:
     finished_stages = [s for s in stages if s.done()]
