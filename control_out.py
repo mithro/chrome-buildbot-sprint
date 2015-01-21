@@ -52,14 +52,17 @@ cached_status = {}
 
 def update_cached_status():
   print time.time(), 'Updating cached status'
-  for resource_name, status_column, suppress_zone in STATUS_CACHES:
-    lines = [line for line in subprocess.check_output(GcloudCommand([resource_name, 'list'], suppress_zone=suppress_zone)).split('\n') if line]
-    header_line = lines[0]
-    row_lines = lines[1:]
-    extract_columns = ['NAME', 'STATUS']
-    extract_index = [header_line.index(column) for column in extract_columns]
-    cached_status[resource_name] = dict([[row_line[index:].split()[0] for index in extract_index] for row_line in row_lines])
-  print time.time(), 'Cached status updated'
+  try:
+    for resource_name, status_column, suppress_zone in STATUS_CACHES:
+      lines = [line for line in subprocess.check_output(GcloudCommand([resource_name, 'list'], suppress_zone=suppress_zone)).split('\n') if line]
+      header_line = lines[0]
+      row_lines = lines[1:]
+      extract_columns = ['NAME', 'STATUS']
+      extract_index = [header_line.index(column) for column in extract_columns]
+      cached_status[resource_name] = dict([[row_line[index:].split()[0] for index in extract_index] for row_line in row_lines])
+    print time.time(), 'Cached status updated'
+  except subprocess.CalledProcessError, e:
+    print time.time(), 'Cached status update failed!', e
 
 def print_cached_status():
   print time.time(), 'Cached resource status:'
