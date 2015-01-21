@@ -3,8 +3,11 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=4 sw=4 et sts=4 ai:
 
+try:
+    import simplejson
+except ImportError:
+    import json as simplejson
 
-import simplejson
 import time
 import urllib
 import pprint
@@ -46,15 +49,25 @@ def LaunchInstances(commit_ids, instance_type, base_type):
         else:
             InstanceStart(instance_type, commit_id, from_snapshot=(base_type, previous_commit_id))
 
-while True:
+def get_commits_real():
     json = urllib.urlopen("https://chromium.googlesource.com/chromium/src/+log/master?format=json").read()
     json = "\n".join(json.splitlines()[1:])
     data = simplejson.loads(json)
     
     # Sort the commits into oldest first
     commit_ids = [entry['commit'] for entry in data['log']][::-1]
+    pprint.pprint(commit_ids)
     commit_info = {entry['commit']: entry for entry in data['log']}
+    return commit_ids
 
+def get_commits_fake():
+    return list(reversed(list(c.strip() for c in file("our-commits.txt", "r").readlines())))
+
+
+while True:
+    import sys
+
+    commit_ids = get_commits_fake()
     snapshots["src"][commit_ids[0]] = 0
 
     while True:
@@ -86,3 +99,7 @@ while True:
         for mtype in instances:
             print "%s %i" % (mtype, len(instances[mtype])), 
         print
+        running = sum(len(instances[mtype]) for mtype in instances)
+        print "Total running", running
+        if running == 0:
+            sys.exit(1)
