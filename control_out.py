@@ -40,6 +40,36 @@ def GcloudCommand(args, suppress_zone=False):
   print time.time(), 'GCE command:', ' '.join(cmd)
   return cmd
 
+# --------------------------------------------------------
+
+STATUS_CACHES = [
+  # (resource name, status column, suppress zone)
+  ('instances', 5, False),
+  ('disks', 4, False),
+  ('snapshots', 3, True),
+]
+cached_status = {}
+
+def update_cached_status():
+  print time.time(), 'Updating cached status'
+  for resource_name, status_column, suppress_zone in STATUS_CACHES:
+    lines = [line for line in subprocess.check_output(GcloudCommand([resource_name, 'list'], suppress_zone=suppress_zone)).split('\n') if line]
+    header_line = lines[0]
+    row_lines = lines[1:]
+    extract_columns = ['NAME', 'STATUS']
+    extract_index = [header_line.index(column) for column in extract_columns]
+    cached_status[resource_name] = dict([[row_line[index:].split()[0] for index in extract_index] for row_line in row_lines])
+  print time.time(), 'Cached status updated'
+
+def print_cached_status():
+  print time.time(), 'Cached resource status:'
+  for resource_name, status_column, suppress_zone in STATUS_CACHES:
+    print resource_name.title() + ':'
+    for name, status in sorted(cached_status[resource_name].items()):
+      print '\t%s (%s)' % (name, status)
+
+# --------------------------------------------------------
+
 # Disk
 def CreateDiskFromSnapshot(disk_name, snapshot_name):
   subprocess.check_call(GcloudCommand(['disks', 'create', disk_name,
@@ -119,32 +149,6 @@ def InstanceName(stage, commit):
 def SnapshotName(commit, content):
   return '-'.join([NoDash(getpass.getuser()), 'snapshot', NoDash(BUILD_PLATFORM), NoDash(commit), content])
 
-
-# --------------------------------------------------------
-
-STATUS_CACHES = [
-  # (resource name, status column, suppress zone)
-  ('instances', 5, False),
-  ('disks', 4, False),
-  ('snapshots', 3, True),
-]
-cached_status = {}
-
-def update_cached_status():
-  print time.time(), 'Updating cached status'
-  for resource_name, status_column, suppress_zone in STATUS_CACHES:
-    lines = [line.split() for line in subprocess.check_output(GcloudCommand([resource_name, 'list'], suppress_zone=suppress_zone)).split('\n') if line]
-    assert lines[0][0] == 'NAME'
-    assert lines[0][status_column] == 'STATUS'
-    cached_status[resource_name] = {(line[0], line[status_column]) for line in lines[1:]}
-  print time.time(), 'Cached status updated'
-
-def print_cached_status():
-  print time.time(), 'Cached resource status:'
-  for resource_name, status_column, suppress_zone in STATUS_CACHES:
-    print resource_name.title() + ':'
-    for name, status in cached_status[resource_name].items():
-      print '\t%s (%s)' % (name status)
 
 # --------------------------------------------------------
 
