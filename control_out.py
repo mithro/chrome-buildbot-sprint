@@ -101,10 +101,8 @@ def CreateInstanceWithDisks(instance_name, image_name, machine_type, disks):
 
 def ShutdownInstance(instance_name):
   RunCommandOnInstance(instance_name, "sudo shutdown -h now")
-  while True:
-    output = subprocess.check_output(GcloudCommand(['instances', 'describe', instance_name]))
-    if "status: RUNNING" not in output:
-      break
+  while InstanceExists(instance_name):
+    time.sleep(1)
 
 # --------------------------------------------------------
 
@@ -281,7 +279,7 @@ class Stage(threading.Thread):
           RunCommandOnInstance(self.instance_name, "true")
           break
         except subprocess.CalledProcessError:
-          time.sleep(0.5)
+          time.sleep(1)
 
       self.log("instance (%s) running", self.instance_name)
 
