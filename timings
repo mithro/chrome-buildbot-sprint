@@ -3,3 +3,10 @@ On a n1-standard-8 (8 vCPU, 30 GB memory) - no SSD
 time fetch chromium 
 real    18m34.923s
 
+
+
+On an n1-standard-16 (16 vCPU, 60GB memory) - with SSD
+time ninja -C out/Debug
+real    81m20.159s
+user    1213m26.227s
+sys     66m7.911s
