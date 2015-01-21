@@ -389,11 +389,9 @@ class BuildStage(Stage):
 
 
 if __name__ == "__main__":
-  latest_commit_id = 'dcb7bf1cd13d2bd5'
+  latest_commit_id = '1874cd207f996341'
   test_commit_ids = [
-    'fa1651193bf94120',
-    '32cbfaa6478f66b9',
-    '1874cd207f996341',
+    '863dc8b59882bf44',
   ]
   latest_sync_snapshot = SnapshotName(latest_commit_id, "src")
   latest_build_snapshot = SnapshotName(latest_commit_id, "out")
