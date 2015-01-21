@@ -6,7 +6,18 @@ real    18m34.923s
 
 
 On an n1-standard-16 (16 vCPU, 60GB memory) - with SSD
+Fresh build 24k items.
 time ninja -C out/Debug
 real    81m20.159s
 user    1213m26.227s
 sys     66m7.911s
+
+
+
+On an n1-standard-16 (16 vCPU, 60GB memory) - with SSD
+Incremental build 66 items
+time ninja -C out/Debug
+real  4m40.925s
+user  7m16.793s
+sys 1m22.035s
+
