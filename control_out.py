@@ -319,14 +319,21 @@ class BuildStage(Stage):
     RunCommandOnInstance(self.instance_name, "sleep 150")
 
 
+
+def get_commits_fake():
+    return list(reversed(list(c.strip()[:12] for c in file("queue/our-commits.txt", "r").readlines())))
+
+
 if __name__ == "__main__":
-  latest_sync_snapshot = SnapshotName("commit0", "src")
-  latest_build_snapshot = SnapshotName("commit0", "out")
+  commits = get_commits_fake()
+
+  latest_sync_snapshot = SnapshotName(commits[0], "src")
+  latest_build_snapshot = SnapshotName(commits[0], "out")
   assert SnapshotReady(latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
   assert SnapshotReady(latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
 
   stages = []
-  for c in ["commit1", "commit2", "commit3"]:
+  for c in commits[1:]:
     stages.append(SyncStage(c, sync_from=latest_sync_snapshot))
     stages.append(BuildStage(c, build_from=latest_build_snapshot))
     latest_sync_snapshot = SnapshotName(c, "src")
