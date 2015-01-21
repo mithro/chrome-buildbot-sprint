@@ -170,9 +170,6 @@ import threading
 import traceback
 
 class Disk(object):
-  def log(self, s, *args):
-    print time.time(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
-
   def __init__(self, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
     self.content = content
     self.commit_id = commit_id
@@ -181,6 +178,11 @@ class Disk(object):
     self.from_snapshot = from_snapshot
     self.mode = mode
     self.save_snapshot = save_snapshot
+
+    self.durations = {}
+
+  def log(self, s, *args):
+    print time.time(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
 
   @property
   def name(self):
@@ -206,19 +208,27 @@ class Disk(object):
 
   def create(self):
     self.log("creating disk")
+    start_create_time = time.time()
     assert not self.exists()
     CreateDiskFromSnapshot(self.name, self.from_snapshot)
+    self.durations['create'] = time.time() - start_create_time
     self.log("created disk")
 
   def cleanup(self, clear_snapshot=False):
+    start_clean_up_time = time.time()
     if self.exists():
+      start_clean_up_disk_time = time.time()
       DeleteDisk(self.name)
+      self.durations['clean_up_disk'] = time.time() - start_clean_up_disk_time
       self.log("deleted disk")
 
     if clear_snapshot and self.save_snapshot:
       if SnapshotReady(self.snapshot_name):
+        start_clean_up_snapshot_time = time.time()
         DeleteSnapshot(self.snapshot_name)
+        self.durations['clean_up_snapshot'] = time.time() - start_clean_up_snapshot_time
         self.log("deleted snapshot %s", self.snapshot_name)
+    self.durations['clean_up'] = time.time() - start_clean_up_time
 
   def save(self):
     if self.save_snapshot:
@@ -233,19 +243,21 @@ class Disk(object):
 
 
 class Stage(threading.Thread):
-  def log(self, s, *args):
-    print time.time(), repr(self), s % args
-
-  @classmethod
-  def name(cls):
-    return cls.__name__.lower()[:-len("stage")]
-
   def __init__(self, commit_id):
     threading.Thread.__init__(self)
 
     assert self.name() is not Stage.name()
     self.commit_id = commit_id
     self.instance_name = InstanceName(self.name(), self.commit_id)
+
+    self.durations = {}
+
+  def log(self, s, *args):
+    print time.time(), repr(self), s % args
+
+  @classmethod
+  def name(cls):
+    return cls.__name__.lower()[:-len("stage")]
 
   def __repr__(self):
     return "%s(%s)" % (self.name(), self.commit_id)
@@ -263,6 +275,7 @@ class Stage(threading.Thread):
     return True
 
   def run(self):
+    start_run_time = time.time()
     self.log("running")
 
     # Check we are not already completed or currently running.
@@ -271,24 +284,30 @@ class Stage(threading.Thread):
 
     disks = self.disks
     try:
+      start_create_disks_time = time.time()
       for disk in disks:
         disk.create()
+      self.durations['create_disks'] = time.time() - start_create_disks_time
 
       # Start up the instance and wait for it to be running.
+      start_create_instance_time = time.time()
       self.log("instance (%s) launching", self.instance_name)
       CreateInstanceWithDisks(self.instance_name, ImageName(), self.machine_type, disks)
       self.log("instance (%s) launched", self.instance_name)
-      
+      self.durations['create_instance'] = time.time() - start_create_instance_time
+
+      start_wait_for_ssh_time = time.time()
       while True:
         try:
           RunCommandOnInstance(self.instance_name, "true")
           break
         except subprocess.CalledProcessError:
           time.sleep(1)
-
+      self.durations['wait_for_ssh'] = time.time() - start_wait_for_ssh_time
       self.log("instance (%s) running", self.instance_name)
 
       # Mount the disks into the VM
+      start_mount_disks_time = time.time()
       cmd = ""
       for disk in disks:
         cmd += """\
@@ -296,20 +315,27 @@ mkdir -p %(mnt)s; \
 sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
 """ % {"name": disk.name, "mnt": disk.mnt}
       RunCommandOnInstance(self.instance_name, cmd)
+      self.durations['mount_disks'] = time.time() - start_mount_disks_time
       self.log("disks mounted")
 
       # Running the actual work command
       self.log("command commence")
+      start_command_time = time.time()
       self.command()
+      self.durations['command'] = time.time() - start_command_time
       self.log("command complete")
 
       # Shutdown instance
+      start_shutdown_time = time.time()
       ShutdownInstance(self.instance_name)
+      self.durations['shutdown'] = time.time() - start_shutdown_time
       self.log("instance (%s) terminated", self.instance_name)
 
       # Create snapshot
+      start_save_disks_time = time.time()
       for disk in disks:
         disk.save()
+      self.durations['save_disks'] = time.time() - start_save_disks_time
       self.log("disks saved")
 
     except Exception, e:
@@ -317,18 +343,24 @@ sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
       traceback.print_exc(file=tb)
       self.log("Exception: %s", e)
       self.log(tb.getvalue())
-      sys.exit(1)
+      raise
 
     self.log("finalizing")
     # Delete instance
+    start_delete_instance_time = time.time()
     if InstanceExists(self.instance_name):
       DeleteInstance(self.instance_name)
       self.log("instance (%s) deleted", self.instance_name)
+    self.durations['delete_instance'] = time.time() - start_delete_instance_time
 
     # Cleanup disks
+    start_clean_up_disks_time = time.time()
     for disk in disks:
       disk.cleanup()
+    self.durations['clean_up_disks'] = time.time() - start_clean_up_disks_time
     self.log("disks deleted")
+
+    self.durations['disks'] = [disk.durations for disk in disks]
 
 
 class SyncStage(Stage):
@@ -404,9 +436,9 @@ if __name__ == "__main__":
   latest_commit_id = '863dc8b59882bf44'
   test_commit_ids = [
     '3efbc4188cd3d2dc',
-    '2cc83022ff33e4b3',
-    'd22f93d643e8717f',
-    '90cf1c6008252b6c',
+    # '2cc83022ff33e4b3',
+    # 'd22f93d643e8717f',
+    # '90cf1c6008252b6c',
   ]
   latest_sync_snapshot = SnapshotName(latest_commit_id, "src")
   latest_build_snapshot = SnapshotName(latest_commit_id, "out")
@@ -420,7 +452,7 @@ if __name__ == "__main__":
   stages = []
   for c in test_commit_ids:
     stages.append(SyncStage(c, sync_from=latest_sync_snapshot))
-    stages.append(BuildStage(c, build_from=latest_build_snapshot))
+    # stages.append(BuildStage(c, build_from=latest_build_snapshot))
     latest_sync_snapshot = SnapshotName(c, "src")
 
   print "---"
@@ -449,16 +481,18 @@ if __name__ == "__main__":
 
   raw_input("Run things? [Y/y]")
 
+  finished_stages = []
   while stages:
     print time.time(), 'Main loop iteration'
 
     update_cached_status()
     print_cached_status()
 
-    finished_stages = [s for s in stages if s.done()]
-    if finished_stages:
-      print time.time(), "Finished", finished_stages
-      stages = [s for s in stages if not s in finished_stages]
+    newly_finished_stages = [s for s in stages if s.done()]
+    if newly_finished_stages:
+      print time.time(), "Finished", newly_finished_stages
+      stages = [s for s in stages if not s in newly_finished_stages]
+      finished_stages += newly_finished_stages
 
     for stage in stages:
       if stage.can_run() and not stage.is_alive():
@@ -469,4 +503,14 @@ if __name__ == "__main__":
       if stage.is_alive():
         print time.time(), "Currently running", stage
 
+
     time.sleep(60)
+
+  print '---'
+  print '---'
+
+  print 'All stages complete'
+  import pprint
+  for stage in finished_stages:
+    print stage
+    pprint.pprint(stage.durations, width=1)
