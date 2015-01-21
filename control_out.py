@@ -6,7 +6,8 @@
 import getpass
 import subprocess
 
-BUILD_PLATFORM="linux"
+MACHINE_SIZE = 'n1-standard-1'
+BUILD_PLATFORM = "linux"
 
 import time
 time_time_orig = time.time
@@ -22,62 +23,91 @@ def NoDash(string):
 # Basic wrapper around the gcloud commands
 # --------------------------------------------------------
 
+from libcloud.common.google import ResourceNotFoundError
+from libcloud.compute.types import Provider
+from libcloud.compute.providers import get_driver
+from libcloud.compute.ssh import ParamikoSSHClient as SSHClient
+
+PROJECT_ID = 'delta-trees-830'
+REGION = 'us-central1'
+ZONE = 'us-central1-a'
+
+SERVICE_ACCOUNT_EMAIL = '621016184110-tpkj4skaep6c8ccgolhoheepffasa9kq@developer.gserviceaccount.com'
+SERVICE_ACCOUNT_KEY_PATH = '../chrome-buildbot-sprint-c514ee5826d1.pem'
+SCOPES = ['https://www.googleapis.com/auth/compute']
+
+SSH_KEY_PATH = '../gce_bot_rsa'
+STARTUP_SCRIPT = 'startup_script.sh'
+
+ComputeEngine = get_driver(Provider.GCE)
+DRIVER = ComputeEngine(SERVICE_ACCOUNT_EMAIL,
+                       SERVICE_ACCOUNT_KEY_PATH,
+                       datacenter=ZONE,
+                       project=PROJECT_ID,
+                       auth_type='SA',
+                       scopes=SCOPES)
+
 # Disk
 def CreateDiskFromSnapshot(disk_name, snapshot_name):
-  subprocess.check_call(['gcloud', 'compute', 'disks', 'create', disk_name,
-                   '--source-snapshot', snapshot_name])
+  DRIVER.create_volume(size=None, name=disk_name, snapshot=snapshot_name, ex_disk_type='pd-ssd')
 
 def SnapshotDisk(disk_name, snapshot_name):
-  subprocess.check_call(['gcloud', 'compute', 'disks', 'snapshot', disk_name,
-                   '--snapshot-names', snapshot_name])
+  volume = DRIVER.ex_get_volume(disk_name)
+  DRIVER.create_volume_snapshot(volume, snapshot_name)
 
 def DeleteDisk(disk_name):
-  subprocess.check_call(['gcloud', 'compute', 'disks', 'delete', disk_name,
-                   '--quiet'])
+  DRIVER.destroy_volume(DRIVER.ex_get_volume(disk_name))
 
 def DiskExists(disk_name):
-  return 0 == subprocess.call(['gcloud', 'compute', 'disks', 'describe', disk_name], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
+  try:
+    DRIVER.ex_get_volume(disk_name)
+    return True
+  except ResourceNotFoundError:
+    return False
 
 # Snapshots
 def SnapshotReady(snapshot_name):
   try:
-    output = subprocess.check_output(['gcloud', 'compute', 'snapshots', 'describe', snapshot_name], stderr=subprocess.STDOUT)
-  except subprocess.CalledProcessError:
+    DRIVER.ex_get_snapshot(snapshot_name)
+    return True
+  except ResourceNotFoundError:
     return False
-  return "status: READY" in output
-  #return 0 == subprocess.call(, stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
-
 
 def DeleteSnapshot(snapshot_name):
-  subprocess.check_call(['gcloud', 'compute', 'snapshots', 'delete', snapshot_name,
-                   '--quiet'])
+  DRIVER.destroy_volume_snapshot(DRIVER.ex_get_snapshot(snapshot_name))
 
 # Instances
 def RunCommandOnInstance(instance_name, command):
-  subprocess.check_call(['gcloud', 'compute', 'ssh', instance_name,
-                   '--command', command])
+  node = DRIVER.ex_get_node(instance_name)
+  ssh = SSHClient(node.public_ips[0], username='ubuntu', key=SSH_KEY_PATH)
+  ssh.connect()
+  stdout, stderr, returncode = ssh.run(command)
+  ssh.close()
+  if returncode != 0:
+    raise subprocess.CalledProcessError(returncode, command, stdout + stderr)
 
 def InstanceExists(instance_name):
-  return 0 == subprocess.call(['gcloud', 'compute', 'instances', 'describe', instance_name], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
+  try:
+    DRIVER.ex_get_node(instance_name)
+    return True
+  except ResourceNotFoundError:
+    return False
 
 def DeleteInstance(instance_name):
-  subprocess.check_call(['gcloud', 'compute', 'instances', 'delete', instance_name,
-                   '--quiet'])
+  DRIVER.destroy_node(DRIVER.ex_get_node(instance_name))
 
-def CreateInstanceWithDisks(instance_name, image_name, disks):
-  params = ['gcloud', 'compute', 'instances', 'create', instance_name,
-            '--image', image_name]
+def CreateInstanceWithDisks(instance_name, image_name, disks=[]):
+  node = DRIVER.deploy_node(instance_name, size=MACHINE_SIZE, image=image_name, script=STARTUP_SCRIPT)
   for disk in disks:
-    params += ['--disk', 'mode='+disk.mode, 'name='+disk.name, 'device-name='+disk.name]
-  subprocess.check_call(params)
-
+    DRIVER.attach_volume(node, DRIVER.ex_get_volume(disk.name), disk.name, disk.mode)
 
 def ShutdownInstance(instance_name):
   RunCommandOnInstance(instance_name, "sudo shutdown -h now")
-  while True:
-    output = subprocess.check_output(['gcloud', 'compute', 'instances', 'describe', instance_name])
-    if "status: RUNNING" not in output:
-      break
+  try:
+    while DRIVER.ex_get_node(instance_name).state == 'RUNNING':
+      pass
+  except ResourceNotFoundError:
+    pass
 
 # --------------------------------------------------------
 
@@ -117,7 +147,7 @@ class Disk(object):
 
   @property
   def name(self):
-    return DiskName(self.stage, self.commit_id, self.content)  
+    return DiskName(self.stage, self.commit_id, self.content)
 
   @property
   def snapshot_name(self):
@@ -211,7 +241,7 @@ class Stage(threading.Thread):
       self.log("instance (%s) launching", self.instance_name)
       CreateInstanceWithDisks(self.instance_name, ImageName(), disks)
       self.log("instance (%s) launched", self.instance_name)
-      
+
       while True:
         try:
           RunCommandOnInstance(self.instance_name, "true")
