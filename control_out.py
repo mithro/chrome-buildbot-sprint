@@ -3,6 +3,9 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
+import sys
+sys.path.append("libcloud")
+
 import getpass
 import subprocess
 
@@ -10,10 +13,8 @@ MACHINE_SIZE = 'n1-standard-1'
 BUILD_PLATFORM = "linux"
 
 import time
-time_time_orig = time.time
-def reltime(starttime=time_time_orig()):
-  return time_time_orig() - starttime
-time.time = reltime
+def reltime(starttime=time.time()):
+  return time.time() - starttime
 
 
 def NoDash(string):
@@ -41,6 +42,7 @@ STARTUP_SCRIPT = 'startup_script.sh'
 
 ComputeEngine = get_driver(Provider.GCE)
 def new_driver():
+  print reltime(), "creating new driver", threading.currentThread()
   return ComputeEngine(SERVICE_ACCOUNT_EMAIL,
                        SERVICE_ACCOUNT_KEY_PATH,
                        datacenter=ZONE,
@@ -79,12 +81,13 @@ import traceback
 
 class Instance(object):
   def log(self, s, *args):
-    print time.time(), "%s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
+    print reltime(), "%s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
 
   def __init__(self, driver, stage, commit_id):
     self.driver = driver
     self.stage = stage
     self.commit_id = commit_id
+    self.disks = []
 
   @property
   def name(self):
@@ -98,10 +101,11 @@ class Instance(object):
       return False
 
   def launch(self, disks):
-    self.log("launching")
-    node = self.driver.deploy_node(self.name, size=MACHINE_SIZE, image=image_name, script=STARTUP_SCRIPT)
+    self.log("launching %r %r", self.name, {size=MACHINE_SIZE, image=ImageName(), script=STARTUP_SCRIPT})
+    self.node = self.driver.deploy_node(self.name, size=MACHINE_SIZE, image=ImageName(), script=STARTUP_SCRIPT)
     for disk in disks:
-      self.driver.attach_volume(node, self.driver.ex_get_volume(disk.name), disk.name, disk.mode)
+      print self.node, self.driver.ex_get_volume(disk.name), disk.name, disk.mode
+      self.driver.attach_volume(self.node, self.driver.ex_get_volume(disk.name), disk.name, disk.mode)
     self.disks = disks
     self.log("launched", self.name)
 
@@ -156,7 +160,7 @@ sudo chmod a+rw %(mnt)s; \
 
 class Disk(object):
   def log(self, s, *args):
-    print time.time(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
+    print reltime(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
 
   def __init__(self, driver, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
     self.driver = driver
@@ -226,7 +230,7 @@ class Disk(object):
 
 class Stage(threading.Thread):
   def log(self, s, *args):
-    print time.time(), repr(self), s % args
+    print reltime(), repr(self), s % args
 
   @classmethod
   def name(cls):
@@ -380,7 +384,7 @@ if __name__ == "__main__":
   for s in stages:
     print "Cleaning up", s
     # Cleanup any leftover instances
-    instance = stage.instance(driver)
+    instance = s.instance(driver)
     if instance.exists():
       instance.delete()
 
@@ -402,16 +406,16 @@ if __name__ == "__main__":
   while stages:
     finished_stages = [s for s in stages if s.done(driver)]
     if finished_stages:
-      print time.time(), "Finished", finished_stages
+      print reltime(), "Finished", finished_stages
       stages = [s for s in stages if not s in finished_stages]
 
     for stage in stages:
       if stage.can_run(driver) and not stage.is_alive():
         if not stage.done(driver):
-          print time.time(), "Starting", stage
+          print reltime(), "Starting", stage
           stage.start()
 
       if stage.is_alive():
-        print time.time(), "Currently running", stage
+        print reltime(), "Currently running", stage
 
     time.sleep(1)
