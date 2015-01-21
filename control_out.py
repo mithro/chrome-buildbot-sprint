@@ -7,6 +7,14 @@ import getpass
 import subprocess
 
 BUILD_PLATFORM="linux"
+GCE_PROJECT = 'delta-trees-830'
+GCE_PROJECT_FLAG = '--project=%s' % GCE_PROJECT
+GCE_ZONE = 'us-central1-a'
+GCE_ZONE_FLAG = '--zone=%s' % GCE_ZONE
+
+SHARED_COMMANDS = {
+  'depot_tools_path': 'export PATH=~/chromium/depot_tools:"$PATH"',
+}
 
 import time
 time_time_orig = time.time
@@ -22,26 +30,33 @@ def NoDash(string):
 # Basic wrapper around the gcloud commands
 # --------------------------------------------------------
 
+def GcloudCommand(args, suppress_zone=False):
+  cmd = ['gcloud', 'compute'] + args + ['--project=%s' % GCE_PROJECT]
+  if not suppress_zone:
+    cmd += ['--zone=%s' % GCE_ZONE]
+  print time.time(), 'GCE command:', ' '.join(cmd)
+  return cmd
+
 # Disk
 def CreateDiskFromSnapshot(disk_name, snapshot_name):
-  subprocess.check_call(['gcloud', 'compute', 'disks', 'create', disk_name,
-                   '--source-snapshot', snapshot_name])
+  subprocess.check_call(GcloudCommand(['disks', 'create', disk_name,
+                   '--source-snapshot', snapshot_name]))
 
 def SnapshotDisk(disk_name, snapshot_name):
-  subprocess.check_call(['gcloud', 'compute', 'disks', 'snapshot', disk_name,
-                   '--snapshot-names', snapshot_name])
+  subprocess.check_call(GcloudCommand(['disks', 'snapshot', disk_name,
+                   '--snapshot-names', snapshot_name], suppress_zone=True))
 
 def DeleteDisk(disk_name):
-  subprocess.check_call(['gcloud', 'compute', 'disks', 'delete', disk_name,
-                   '--quiet'])
+  subprocess.check_call(GcloudCommand(['disks', 'delete', disk_name,
+                   '--quiet']))
 
 def DiskExists(disk_name):
-  return 0 == subprocess.call(['gcloud', 'compute', 'disks', 'describe', disk_name], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
+  return 0 == subprocess.call(GcloudCommand(['disks', 'describe', disk_name]), stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
 
 # Snapshots
 def SnapshotReady(snapshot_name):
   try:
-    output = subprocess.check_output(['gcloud', 'compute', 'snapshots', 'describe', snapshot_name], stderr=subprocess.STDOUT)
+    output = subprocess.check_output(GcloudCommand(['snapshots', 'describe', snapshot_name], suppress_zone=True), stderr=subprocess.STDOUT)
   except subprocess.CalledProcessError:
     return False
   return "status: READY" in output
@@ -49,33 +64,33 @@ def SnapshotReady(snapshot_name):
 
 
 def DeleteSnapshot(snapshot_name):
-  subprocess.check_call(['gcloud', 'compute', 'snapshots', 'delete', snapshot_name,
-                   '--quiet'])
+  subprocess.check_call(GcloudCommand(['snapshots', 'delete', snapshot_name,
+                   '--quiet'], suppress_zone=True))
 
 # Instances
 def RunCommandOnInstance(instance_name, command):
-  subprocess.check_call(['gcloud', 'compute', 'ssh', instance_name,
-                   '--command', command])
+  subprocess.check_call(GcloudCommand(['ssh', instance_name,
+                   '--command', command]))
 
 def InstanceExists(instance_name):
-  return 0 == subprocess.call(['gcloud', 'compute', 'instances', 'describe', instance_name], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
+  return 0 == subprocess.call(GcloudCommand(['instances', 'describe', instance_name]), stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
 
 def DeleteInstance(instance_name):
-  subprocess.check_call(['gcloud', 'compute', 'instances', 'delete', instance_name,
-                   '--quiet'])
+  subprocess.check_call(GcloudCommand(['instances', 'delete', instance_name,
+                   '--quiet']))
 
 def CreateInstanceWithDisks(instance_name, image_name, disks):
-  params = ['gcloud', 'compute', 'instances', 'create', instance_name,
+  params = ['instances', 'create', instance_name,
             '--image', image_name]
   for disk in disks:
     params += ['--disk', 'mode='+disk.mode, 'name='+disk.name, 'device-name='+disk.name]
-  subprocess.check_call(params)
+  subprocess.check_call(GcloudCommand(params))
 
 
 def ShutdownInstance(instance_name):
   RunCommandOnInstance(instance_name, "sudo shutdown -h now")
   while True:
-    output = subprocess.check_output(['gcloud', 'compute', 'instances', 'describe', instance_name])
+    output = subprocess.check_output(GcloudCommand(['instances', 'describe', instance_name]))
     if "status: RUNNING" not in output:
       break
 
@@ -127,8 +142,8 @@ class Disk(object):
   @property
   def mnt(self):
     return {
-      "src": "/mnt/disk",
-      "out": "/mnt/disk/chromium/src/out",
+      "src": "chromium",
+      "out": "chromium/src/out",
     }[self.content]
 
   def exists(self):
@@ -225,9 +240,8 @@ class Stage(threading.Thread):
       cmd = ""
       for disk in disks:
         cmd += """\
-sudo mkdir -p %(mnt)s; \
-sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
-sudo chmod a+rw %(mnt)s; \
+mkdir -p %(mnt)s; \
+sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s \
 """ % {"name": disk.name, "mnt": disk.mnt}
       RunCommandOnInstance(self.instance_name, cmd)
       self.log("disks mounted")
@@ -285,7 +299,11 @@ class SyncStage(Stage):
     ]
 
   def command(self):
-    RunCommandOnInstance(self.instance_name, "sleep 30")
+    RunCommandOnInstance(self.instance_name, '&&'.join([
+      SHARED_COMMANDS['depot_tools_path'],
+      'cd chromium/src',
+      'time gclient sync -r ' + self.commit_id,
+    ]))
 
 
 class BuildStage(Stage):
@@ -316,17 +334,28 @@ class BuildStage(Stage):
     ]
 
   def command(self):
-    RunCommandOnInstance(self.instance_name, "sleep 150")
+    RunCommandOnInstance(self.instance_name, '&&'.join([
+      SHARED_COMMANDS['depot_tools_path'],
+      'cd chromium/src',
+      'time build/gyp_chromium',
+      'time ninja -C out/Debug',
+    ]))
 
 
 if __name__ == "__main__":
-  latest_sync_snapshot = SnapshotName("commit0", "src")
-  latest_build_snapshot = SnapshotName("commit0", "out")
+  latest_commit_id = 'dcb7bf1cd13d2bd5'
+  test_commit_ids = [
+    'fa1651193bf94120',
+    '32cbfaa6478f66b9',
+    '1874cd207f996341',
+  ]
+  latest_sync_snapshot = SnapshotName(latest_commit_id, "src")
+  latest_build_snapshot = SnapshotName(latest_commit_id, "out")
   assert SnapshotReady(latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
   assert SnapshotReady(latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
 
   stages = []
-  for c in ["commit1", "commit2", "commit3"]:
+  for c in test_commit_ids:
     stages.append(SyncStage(c, sync_from=latest_sync_snapshot))
     stages.append(BuildStage(c, build_from=latest_build_snapshot))
     latest_sync_snapshot = SnapshotName(c, "src")
