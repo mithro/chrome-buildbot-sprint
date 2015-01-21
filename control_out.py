@@ -47,34 +47,13 @@ DRIVER = ComputeEngine(SERVICE_ACCOUNT_EMAIL,
                        auth_type='SA',
                        scopes=SCOPES)
 
-# Disk
-def CreateDiskFromSnapshot(disk_name, snapshot_name):
-  DRIVER.create_volume(size=None, name=disk_name, snapshot=snapshot_name, ex_disk_type='pd-ssd')
-
-def SnapshotDisk(disk_name, snapshot_name):
-  volume = DRIVER.ex_get_volume(disk_name)
-  DRIVER.create_volume_snapshot(volume, snapshot_name)
-
-def DeleteDisk(disk_name):
-  DRIVER.destroy_volume(DRIVER.ex_get_volume(disk_name))
-
-def DiskExists(disk_name):
-  try:
-    DRIVER.ex_get_volume(disk_name)
-    return True
-  except ResourceNotFoundError:
-    return False
-
 # Snapshots
-def SnapshotReady(snapshot_name):
+def SnapshotReady(driver, snapshot_name):
   try:
-    DRIVER.ex_get_snapshot(snapshot_name)
+    driver.ex_get_snapshot(snapshot_name)
     return True
   except ResourceNotFoundError:
     return False
-
-def DeleteSnapshot(snapshot_name):
-  DRIVER.destroy_volume_snapshot(DRIVER.ex_get_snapshot(snapshot_name))
 
 # Instances
 def RunCommandOnInstance(instance_name, command):
@@ -136,7 +115,9 @@ class Disk(object):
   def log(self, s, *args):
     print time.time(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
 
-  def __init__(self, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
+  def __init__(self, driver, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
+    self.driver = driver
+
     self.content = content
     self.commit_id = commit_id
 
@@ -162,37 +143,57 @@ class Disk(object):
     }[self.content]
 
   def exists(self):
-    return DiskExists(self.name)
+    return self.DiskExists(self.name)
 
   def can_create(self):
-    return SnapshotReady(self.from_snapshot)
+    return SnapshotReady(self.driver, self.from_snapshot)
 
   def create(self):
     self.log("creating disk")
     assert not self.exists()
-    CreateDiskFromSnapshot(self.name, self.from_snapshot)
+    self.CreateDiskFromSnapshot(self.name, self.from_snapshot)
     self.log("created disk")
 
   def cleanup(self, clear_snapshot=False):
     if self.exists():
-      DeleteDisk(self.name)
+      self.DeleteDisk(self.name)
       self.log("deleted disk")
 
     if clear_snapshot and self.save_snapshot:
-      if SnapshotReady(self.snapshot_name):
-        DeleteSnapshot(self.snapshot_name)
+      if SnapshotReady(self.driver, self.snapshot_name):
+        self.DeleteSnapshot(self.snapshot_name)
         self.log("deleted snapshot %s", self.snapshot_name)
 
   def save(self):
     if self.save_snapshot:
       self.log("creating snapshot %s", self.snapshot_name)
-      SnapshotDisk(self.name, self.snapshot_name)
+      self.SnapshotDisk(self.name, self.snapshot_name)
       self.log("created snapshot %s", self.snapshot_name)
 
   def saved(self):
     if self.save_snapshot:
-      return SnapshotReady(self.snapshot_name)
+      return SnapshotReady(self.driver, self.snapshot_name)
     return True
+
+  def CreateDiskFromSnapshot(disk_name, snapshot_name):
+    self.driver.create_volume(size=None, name=disk_name, snapshot=snapshot_name, ex_disk_type='pd-ssd')
+
+  def SnapshotDisk(disk_name, snapshot_name):
+    volume = self.driver.ex_get_volume(disk_name)
+    self.driver.create_volume_snapshot(volume, snapshot_name)
+
+  def DeleteDisk(disk_name):
+    self.driver.destroy_volume(self.driver.ex_get_volume(disk_name))
+
+  def DiskExists(disk_name):
+    try:
+      self.driver.ex_get_volume(disk_name)
+      return True
+    except ResourceNotFoundError:
+      return False
+
+  def DeleteSnapshot(snapshot_name):
+    self.driver.destroy_volume_snapshot(DRIVER.ex_get_snapshot(snapshot_name))
 
 
 class Stage(threading.Thread):
@@ -214,13 +215,13 @@ class Stage(threading.Thread):
     return "%s(%s)" % (self.name(), self.commit_id)
 
   def can_run(self):
-    for disk in self.disks:
+    for disk in self.disks(DRIVER):
       if not disk.can_create():
         return False
     return True
 
   def done(self):
-    for disk in self.disks:
+    for disk in self.disks(DRIVER):
       if not disk.saved():
         return False
     return True
@@ -232,7 +233,7 @@ class Stage(threading.Thread):
     assert not self.done()
     assert not InstanceExists(self.instance_name)
 
-    disks = self.disks
+    disks = self.disks(DRIVER)
     try:
       for disk in disks:
         disk.create()
@@ -302,10 +303,10 @@ class SyncStage(Stage):
     Stage.__init__(self, commit_id)
     self.sync_from = sync_from
 
-  @property
-  def disks(self):
+  def disks(self, driver):
     return [
       Disk(
+        driver=driver,
         content="src",
         commit_id=self.commit_id,
         stage=self.name(),
@@ -323,11 +324,11 @@ class BuildStage(Stage):
     Stage.__init__(self, commit_id)
     self.build_from = build_from
 
-  @property
-  def disks(self):
+  def disks(self, driver):
     return [
       # Figure out the src for this commit
       Disk(
+        driver=driver,
         content="src",
         commit_id=self.commit_id,
         stage=self.name(),
@@ -337,6 +338,7 @@ class BuildStage(Stage):
 
       # Create the disk we'll use to generate the snapshot onto.
       Disk(
+        driver=driver,
         content="out",
         commit_id=self.commit_id,
         stage=self.name(),
@@ -359,8 +361,8 @@ if __name__ == "__main__":
 
   latest_sync_snapshot = SnapshotName(commits[0], "src")
   latest_build_snapshot = SnapshotName(commits[0], "out")
-  assert SnapshotReady(latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
-  assert SnapshotReady(latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
+  assert SnapshotReady(DRIVER, latest_sync_snapshot), "%s doesn't exist" % latest_sync_snapshot
+  assert SnapshotReady(DRIVER, latest_build_snapshot), "%s doesn't exist" % latest_build_snapshot
 
   stages = []
   for c in commits[1:]:
