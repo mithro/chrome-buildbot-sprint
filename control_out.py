@@ -53,13 +53,13 @@ def new_driver():
 # Snapshots
 def SnapshotReady(driver, snapshot_name):
   try:
-    driver.ex_get_snapshot(snapshot_name)
-    return True
+    ss = driver.ex_get_snapshot(snapshot_name)
+    return ss.status == 'READY'
   except ResourceNotFoundError:
     return False
 
 def ImageName():
-  return 'ubuntu-14-04'
+  return 'boot-image-wip'
 
 # Naming
 def DiskName(stage, commit, content):
@@ -101,13 +101,12 @@ class Instance(object):
       return False
 
   def launch(self, disks):
-    self.log("launching %r %r", self.name, {size=MACHINE_SIZE, image=ImageName(), script=STARTUP_SCRIPT})
+    self.log("launching")
     self.node = self.driver.deploy_node(self.name, size=MACHINE_SIZE, image=ImageName(), script=STARTUP_SCRIPT)
     for disk in disks:
-      print self.node, self.driver.ex_get_volume(disk.name), disk.name, disk.mode
       self.driver.attach_volume(self.node, self.driver.ex_get_volume(disk.name), disk.name, disk.mode)
     self.disks = disks
-    self.log("launched", self.name)
+    self.log("launched")
 
   def run(self, command):
     self.log("running %r", command)
@@ -124,8 +123,8 @@ class Instance(object):
       try:
         self.run("true")
         break
-      except subprocess.CalledProcessError:
-        self.log("waiting")
+      except Exception, e:
+        self.log("waiting %s", e)
         time.sleep(0.5)
     self.log("running")
 
@@ -162,7 +161,7 @@ class Disk(object):
   def log(self, s, *args):
     print reltime(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
 
-  def __init__(self, driver, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
+  def __init__(self, driver, content, commit_id, stage, from_snapshot, mode="READ_WRITE", save_snapshot=False):
     self.driver = driver
 
     self.content = content
@@ -230,7 +229,7 @@ class Disk(object):
 
 class Stage(threading.Thread):
   def log(self, s, *args):
-    print reltime(), repr(self), s % args
+    print reltime(), repr(self), s, args
 
   @classmethod
   def name(cls):
@@ -287,6 +286,7 @@ class Stage(threading.Thread):
     except Exception, e:
       tb = StringIO.StringIO()
       traceback.print_exc(file=tb)
+      tb.seek(0)
       self.log("Exception: %s", e)
       self.log(tb.getvalue())
       raise
@@ -340,7 +340,7 @@ class BuildStage(Stage):
         commit_id=self.commit_id,
         stage=self.name(),
         from_snapshot=SnapshotName(self.commit_id, "src"),
-        mode="ro",
+        mode="READ_ONLY",
       ),
 
       # Create the disk we'll use to generate the snapshot onto.
@@ -354,7 +354,7 @@ class BuildStage(Stage):
       ),
     ]
 
-  def command(self):
+  def command(self, instance):
     instance.run("sleep 150")
 
 
@@ -380,7 +380,6 @@ if __name__ == "__main__":
 
   print "---"
   print "---"
-
   for s in stages:
     print "Cleaning up", s
     # Cleanup any leftover instances
@@ -390,8 +389,7 @@ if __name__ == "__main__":
 
     # Clean up any leftover disks from previous runs.
     for disk in s.disks(driver):
-      disk.cleanup(clear_snapshot=True)
-
+      disk.cleanup(clear_snapshot=False)
   print "---"
   print "---"
 
@@ -401,7 +399,7 @@ if __name__ == "__main__":
   print "---"
   print "---"
 
-  raw_input("Run things? [y]")
+  #raw_input("Run things? [y]")
 
   while stages:
     finished_stages = [s for s in stages if s.done(driver)]
