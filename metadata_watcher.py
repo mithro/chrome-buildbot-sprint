@@ -602,17 +602,20 @@ class Handler(object):
         func = None
         try:
             if old_value is None:
-                if hasattr(self, 'add'):
-                    func = self.add
-                    success, output = self.add(name, new_value, **kw)
+                if not hasattr(self, 'add'):
+                    return
+                func = self.add
+                success, output = self.add(name, new_value, **kw)
             elif new_value is None:
-                if hasattr(self, 'remove'):
-                    func = self.remove
-                    success, output = self.remove(name, old_value, **kw)
+                if not hasattr(self, 'remove'):
+                    return
+                func = self.remove
+                success, output = self.remove(name, old_value, **kw)
             elif new_value != old_value:
                 if hasattr(self, 'change'):
-                    func = self.change
-                    success, output = self.change(name, old_value, new_value, **kw)
+                    return
+                func = self.change
+                success, output = self.change(name, old_value, new_value, **kw)
             else:
                 assert False
         except Exception, e:
