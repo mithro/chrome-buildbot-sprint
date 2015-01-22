@@ -16,7 +16,7 @@ METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 import copy
 import re
 
-def compare(old, new, handler, parent=""):
+def compare(old, new, handler, name=""):
     """
     >>> from copy import deepcopy
     >>> def onchange(*args): print "%s: %r -> %r" % args
@@ -85,45 +85,151 @@ def compare(old, new, handler, parent=""):
     a[]: 1 -> None
     a[]: 3 -> None
     >>>
+
+    >>> # Test dicts inside lists
+    >>> l = {'a': [{'b':1}, {'c': 2}]}
+    >>> compare(l, l, onchange)
+    >>> compare(l, {'a': []}, onchange)
+    a: [{'b': 1}, {'c': 2}] -> []
+    a[]: {'b': 1} -> None
+    a[].b: 1 -> None
+    a[]: {'c': 2} -> None
+    a[].c: 2 -> None
+    >>> compare({'a': []}, l, onchange)
+    a: [] -> [{'b': 1}, {'c': 2}]
+    a[]: None -> {'b': 1}
+    a[].b: None -> 1
+    a[]: None -> {'c': 2}
+    a[].c: None -> 2
+    >>> l_add = deepcopy(l)
+    >>> l_add['a'].append({'d': 3})
+    >>> compare(l, l_add, onchange)
+    a: [{'b': 1}, {'c': 2}] -> [{'b': 1}, {'c': 2}, {'d': 3}]
+    a[]: None -> {'d': 3}
+    a[].d: None -> 3
+    >>> l_add = deepcopy(l)
+    >>> l_add['a'][0]['d'] = 3
+    >>> compare(l, l_add, onchange)
+    a: [{'b': 1}, {'c': 2}] -> [{'b': 1, 'd': 3}, {'c': 2}]
+    a[]: None -> {'b': 1, 'd': 3}
+    a[].b: None -> 1
+    a[].d: None -> 3
+    a[]: {'b': 1} -> None
+    a[].b: 1 -> None
+    >>> l_remove = deepcopy(l)
+    >>> l_remove['a'].pop(0)
+    {'b': 1}
+    >>> compare(l, l_remove, onchange)
+    a: [{'b': 1}, {'c': 2}] -> [{'c': 2}]
+    a[]: {'b': 1} -> None
+    a[].b: 1 -> None
+    >>>
     """
-    if old is None:
-        old = {}
-    if new is None:
-        new = {}
+    if old == new:
+        return
 
-    old_keys = set(old.keys())
-    new_keys = set(new.keys())
+    if name:
+        handler(name, old, new)
 
-    for key in sorted(old_keys.union(new_keys)):
-        old_value = old.get(key, None)
-        new_value = new.get(key, None)
+    if isinstance(old, dict) or isinstance(new, dict):
+        if not isinstance(old, dict):
+            dold = {}
+        else:
+            dold = old
 
-        if old_value == new_value:
-            continue
+        if not isinstance(new, dict):
+            dnew = {}
+        else:
+            dnew = new
 
-        fullname = "%s.%s" % (parent, key)
-        sname = fullname[1:]
-        handler(sname, old_value, new_value)
+        old_keys = set(dold.keys())
+        new_keys = set(dnew.keys())
+        for key in sorted(old_keys.union(new_keys)):
+            if name:
+                childname = ("%s.%s" % (name, key))
+            else:
+                childname = key
 
-        if isinstance(old_value, dict) or isinstance(new_value, dict):
-            compare(old_value, new_value, handler, fullname)
+            old_value = dold.get(key, None)
+            new_value = dnew.get(key, None)
+            compare(old_value, new_value, handler, childname)
 
-        elif isinstance(old_value, (list, tuple)) or isinstance(new_value, (list, tuple)):
-            if not isinstance(new_value, (list, tuple)):
-                new_value = []
-            if not isinstance(old_value, (list, tuple)):
-                old_value = []
+    if isinstance(old, (list, tuple)) or isinstance(new, (list, tuple)):
+        if not isinstance(old, (list, tuple)):
+            lold = []
+        else:
+            lold = old
+        if not isinstance(new, (list, tuple)):
+            lnew = []
+        else:
+            lnew = new
 
-            values = new_value + old_value
-            for v in values:
-                if v in old_value and v not in new_value:
-                    handler(sname+"[]", v, None)
-                elif v not in old_value and v in new_value:
-                    handler(sname+"[]", None, v)
-                elif v in old_value and v in new_value:
-                    continue
+        """
+        >>> # Test dicts inside lists
+        >>> l = {'a': [{'b':1}, {'c': 2}]}
+        >>> compare(l, l, onchange)
+        >>> compare(l, {'a': []}, onchange)
+        a: [{'b': 1}, {'c': 2}] -> []
+        a[]: {'b': 1} -> None
+        a[].b: 1 -> None
+        a[]: {'c': 2} -> None
+        a[].c: 2 -> None
+        >>> compare({'a': []}, l, onchange)
+        a: [] -> [{'b': 1}, {'c': 2}]
+        a[]: None -> {'b': 1}
+        a[].b: None -> 1
+        a[]: None -> {'c': 2}
+        a[].c: None -> 2
+        >>> l_add = deepcopy(l)
+        >>> l_add['a'].append({'d': 3})
+        >>> compare(l, l_add, onchange)
+        a: [{'b': 1}, {'c': 2}] -> [{'b': 1}, {'c': 2}, {'d': 3}]
+        a[]: None -> {'d': 3}
+        a[].d: None -> 3
+        >>> l_add = deepcopy(l)
+        >>> l_add['a'][0]['d'] = 3
+        >>> compare(l, l_add, onchange)
+        a: [{'b': 1}, {'c': 2}] -> [{'b': 1, 'd': 3}, {'c': 2}]
+        a[]: {'b': 1} -> {'b': 1, 'd': 3}
+        a[].d: None -> 3
+        >>> l_remove = deepcopy(l)
+        >>> l_remove['a'].pop(0)
+        {'b': 1}
+        >>> compare(l, l_remove, onchange)
+        a: [{'b': 1}, {'c': 2}] -> [{'c': 2}]
+        a[]: {'b': 1} -> {}
+        a[].b: 1 -> None
+        >>>
+        values = lnew + lold
+        if isinstance(values[0], dict):
+            for i in range(0, max(len(lold), len(lnew))):
+                if i < len(lold):
+                    old_value = lold[i]
                 else:
-                    assert False
+                    old_value = None
+
+                if i < len(lnew):
+                    new_value = lnew[i]
+                else:
+                    new_value = None
+
+                compare(old_value, new_value, handler, name+"[]")
+            return
+        """
+
+        values = lnew + lold
+        for v in values:
+            if v in old:
+                old_value = v
+            else:
+                old_value = None
+
+            if v in new:
+                new_value = v
+            else:
+                new_value = None
+
+            compare(old_value, new_value, handler, name + "[]")
 
 
 class Handlers(dict):
