@@ -20,6 +20,13 @@ METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 import copy
 import re
 
+import cStringIO as StringIO
+import traceback
+import tempfile
+
+import os.path
+from multiprocessing.pool import ThreadPool
+
 def compare(old, new, handler, name=""):
     """
     >>> from copy import deepcopy
@@ -414,21 +421,21 @@ class MetadataHandler(object):
 
     def __init__(self):
         self.handlers = Handlers()
-        self.data = {}
+        self._data = {}
 
         self.lock = threading.RLock()
 
     def update(self, new_data):
         with self.lock:
-            compare(self.data, new_data, self.handlers)
-            self.data = new_data
+            compare(self._data, new_data, self.handlers)
+            self._data = new_data
 
     def add_handler(self, matcher, function):
         with self.lock:
             # Call the handler with the current data value
             temp_handlers = Handlers()
             temp_handlers.add(matcher, function)
-            compare({}, self.data, temp_handlers)
+            compare({}, self._data, temp_handlers)
 
             # Add the handler
             self.handlers.add(matcher, function)
@@ -436,9 +443,12 @@ class MetadataHandler(object):
     _sentinal = []
     def get(self, key, default=_sentinal):
         with self.lock:
+            if key is None:
+                return copy.deepcopy(self._data)
+
             fullkey = key
 
-            current = self.data
+            current = self._data
             while True:
                 if key in current or '.' not in key:
                     if key in current:
@@ -488,13 +498,19 @@ class MetadataWatcher(threading.Thread):
         self.last_etag = 0
         self.metadata = MetadataHandler()
 
+        # Fetch the project metadata once first
+        _, new_metadata = self.fetch()
+        self.metadata.update(new_metadata)
+
     def add_handler(self, matcher, function):
         self.metadata.add_handler(matcher, function)
 
-    def get(self, key):
-        self.metadata.get(key)
+    def get(self, key, default=MetadataHandler._sentinal):
+        return self.metadata.get(key, default)
 
-    def run(self):
+    __getitem__ = get
+
+    def fetch(self):
         while True:
             params = dict(self.params)
             params['last_etag'] = self.last_etag
@@ -520,13 +536,17 @@ class MetadataWatcher(threading.Thread):
                 continue
 
             elif status == httplib.OK:
-                new_metadata = simplejson.loads(content)
-                self.metadata.update(new_metadata)
                 headers = response.info()
-                self.last_etag = headers['ETag']
+                new_metadata = simplejson.loads(content)
+                return headers['ETag'], new_metadata
             else:
                 raise UnexpectedStatusException(status)
 
+    def run(self):
+        while True:
+            etag, new_metadata = self.fetch()
+            self.metadata.update(new_metadata)
+            self.last_etag = etag
 
 import socket
 import platform
@@ -542,7 +562,9 @@ class Server(object):
         assert self.metadata.get(self.CALLBACK_URL), """\
 Please add the callback URL for status information to the Compute Engine project with;
 # gcloud compute project-info add-metadata --metadata callback="http://example.com/callback"
-"""
+Current project metadata:
+%s
+""" % (pprint.pformat(self.metadata.get("project", None)))
 
         extra_data = {
             "hostname": socket.gethostname(),
@@ -553,12 +575,21 @@ Please add the callback URL for status information to the Compute Engine project
         full_data.update(extra_data)
 
         # Post data here
+        print "=+"*30
+        print "Posting data"
+        output = full_data["output"]
+        del full_data["output"]
         pprint.pprint((
             self.metadata[self.CALLBACK_URL],
             full_data))
+        print "-"*80
+        print output
+        print "=+"*30
 
 
 import subprocess
+
+
 
 class Handler(object):
     def __init__(self, server, metadata_watcher):
@@ -567,39 +598,53 @@ class Handler(object):
         self.metadata = metadata_watcher
         self.metadata.add_handler(self.NAMESPACE, self)
 
-    def __call__(self, name, old_value, new_value):
-        assert re.match(MATCH, name)
+    def __call__(self, name, old_value, new_value, **kw):
         success = False
-        output = ""
+        output = []
+        func = None
         try:
             if old_value is None:
-                success, output = self.add(new_value)
+                func = self.add
+                success, output = self.add(new_value, **kw)
             elif new_value is None:
-                success, output = self.remove(old_value)
+                func = self.remove
+                success, output = self.remove(old_value, **kw)
             elif new_value != old_value:
-                success, output = self.change(old_value, new_value)
+                func = self.change
+                success, output = self.change(old_value, new_value, **kw)
             else:
                 assert False
         except Exception, e:
             success = "Exception"
-            output += str(e)
-            # Include traceback
+            output.append(str(e))
+            tb = StringIO.StringIO()
+            traceback.print_exc(file=tb)
+            tb.seek(0)
+            output.append(tb.getvalue())
         finally:
-            self.server.post_action({
+            self.post({
+                "function": "%r" % func,
                 "success": success,
-                "output": output,
-                "hostname": socket.gethostname(),
+                "output": "\n".join(output),
                 })
 
-    @staticmethod
-    def run_helper(cmd, output):
+    def post(self, data):
+        data.update({
+            "handler": self.__class__.__name__,
+        })
+        self.server.post_action(data)
+
+    @classmethod
+    def run_helper(cls, cmd, output):
         output.append("="*80)
         output.append("Running: %r" % cmd)
         output.append("----")
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        stdout, _ = p.communicate()
+        outfile = tempfile.NamedTemporaryFile(prefix="%s." % (cls.__name__))
+        print "Running %r and writing log to %r" % (cmd, outfile.name)
+        p = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, shell=True)
         retcode = p.wait()
-        output.append(stdout)
+        outfile.seek(0)
+        output.append(outfile.read())
         output.append("----")
         output.append("Completed with: %s" % retcode)
         output.append("="*80)
@@ -616,10 +661,60 @@ class Handler(object):
         pass
 
 
-import os.path
-class HandlerMount(Handler):
-    NAMESPACE = "instance.attributes.disks$"
+class HandlerAsync(Handler):
+    def __init__(self, *args, **kw):
+        self.pool = ThreadPool()
+        Handler.__init__(self, *args, **kw)
 
+    def __call__(self, *args, **kw):
+        kw['metadata'] = copy.deepcopy(self.metadata.get(None))
+        self.pool.apply_async(Handler.__call__, [self]+list(args), kw)
+
+    def add(self, value, metadata=None):
+        pass
+
+    def remove(self, value, metadata=None):
+        pass
+
+    def change(self, old_value, new_value, metadata=None):
+        pass
+
+
+class HandlerLongCommand(HandlerAsync):
+    NAMESPACE = "instance.attributes.long-commands\[\]"
+    def add(self, cmd, metadata=None):
+        assert metadata is not None
+        output = []
+        output.append("="*80)
+        output.append("Running: %r" % cmd)
+        output.append("----")
+        outfile = tempfile.NamedTemporaryFile(prefix="%s." % (self.__class__.__name__))
+        print "Running %r and writing log to %r" % (cmd, outfile.name)
+        p = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, shell=True)
+
+        while True:
+            self.post({
+                "type": "progress",
+                "cmd" : cmd,
+                "output": open(outfile.name, 'r').read(),
+            })
+
+            retcode = p.poll()
+            if retcode is not None:
+                break
+            else:
+                time.sleep(5)
+
+        outfile.seek(0)
+        output.append(outfile.read())
+        output.append("----")
+        output.append("Completed with: %s" % retcode)
+        output.append("="*80)
+        return retcode == 0, output
+
+
+
+class HandlerDiskBase(Handler):
     @staticmethod
     def device(disk_id):
         return "/dev/disk/by-id/google-%s" % disk_id
@@ -630,12 +725,12 @@ class HandlerMount(Handler):
                 break
         else:
             raise Exception("Disk with id %r not found on instance %r" % (
-                disk_id, self.metadata.data['instance.disks']))
+                disk_id, self.metadata['instance.disks']))
 
-    def add(self, value):
-        assert 'mount-point' in value
-        assert 'disk-id' in value
-        self.assert_disk_attached(value['disk_id'])
+    def mount(self, value):
+        assert 'mount-point' in value, value
+        assert 'disk-id' in value, value
+        self.assert_disk_attached(value['disk-id'])
 
         output = []
         success = True
@@ -645,31 +740,49 @@ class HandlerMount(Handler):
             os.makedirs(value['mount-point'])
 
         # Mount the directory
-        success &= 0 == self.run_helper("""\
-mount %s %s
-""" % (self.device(value['disk-id']), value['mount-point']), output)
+        success &= (0 == self.run_helper("mount %s %s" % (
+            self.device(value['disk-id']), value['mount-point']), output))
 
         # Chown the directory if needed
         if 'user' in value:
-            success &= 0 == self.run_helper("chown %s" % value['user'], output)
+            success &= (0 == self.run_helper("chown %s %s" % (
+                value['user'], value['mount-point']), output))
+
+        success &= (0 == self.run_helper("ls -la %s" % (
+            value['mount-point']), output))
 
         return success, output
 
-    def remove(self, value):
+    def umount(self, value):
         assert 'mount-point' in value
         assert 'disk-id' in value
-        self.assert_disk_attached(value['disk_id'])
+        self.assert_disk_attached(value['disk-id'])
 
         output = []
         success = True
+        found = False
 
-        prefix = self.device(value['disk_id']) + " "
+        self.run_helper("cat /proc/mounts", output)
+
+        prefix = os.path.realpath(self.device(value['disk-id'])) + " "
         for line in open('/proc/mounts', 'r').readlines():
             if line.startswith(prefix):
                 assert line.startswith(prefix+value['mount-point'])
-                success &= 0 == self.run_helper("umount %s" % value['mount-point'])
+                found = True
+                success &= (0 == self.run_helper("umount %s" % value['mount-point'], output))
 
-        return success, output
+        return found and success, output
+
+
+class HandlerMount(HandlerDiskBase):
+    NAMESPACE = "instance.attributes.mount\[\]"
+    add = HandlerDiskBase.mount
+
+
+class HandlerUnmount(HandlerDiskBase):
+    NAMESPACE = "instance.attributes.umount\[\]"
+    add = HandlerDiskBase.umount
+
 
 
 class HandlerShutdown(Handler):
@@ -678,14 +791,14 @@ class HandlerShutdown(Handler):
     def add(self, value):
         assert value == 1
         output = []
-        return 0 == self.run_helper("shutdown -h +1", output), output
+        return 0 == self.run_helper("echo shutdown -h +1", output), output
 
     def remove(self, value):
-        return 0 == self.run_helper("shutdown -c", output), output
+        return 0 == self.run_helper("echo shutdown -c", output), output
 
 
 class HandlerCommand(Handler):
-    NAMESPACE = "instance.attributes.commands[]"
+    NAMESPACE = "instance.attributes.commands\[\]"
 
     def add(self, value):
         output = []
@@ -709,13 +822,15 @@ def Printer(name, old_value, new_value):
 
 
 if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
+    #import doctest
+    #doctest.testmod()
 
     watcher = MetadataWatcher()
     server = Server(watcher)
     HandlerMount(server, watcher)
+    HandlerUnmount(server, watcher)
     HandlerCommand(server, watcher)
+    HandlerLongCommand(server, watcher)
     HandlerShutdown(server, watcher)
 
     watcher.add_handler(".*", Printer)
