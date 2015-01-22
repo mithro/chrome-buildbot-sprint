@@ -1,0 +1,3 @@
+libcloud/
+*.pem
+*_rsa
