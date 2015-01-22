@@ -788,11 +788,11 @@ class HandlerShutdown(Handler):
 
     def add(self, value):
         output = []
-        return 0 == self.run_helper("echo shutdown -h +1", output), output
+        return 0 == self.run_helper("shutdown -h +60", output), output
 
     def remove(self, value):
         output = []
-        return 0 == self.run_helper("echo shutdown -c", output), output
+        return 0 == self.run_helper("shutdown -c", output), output
 
 
 class HandlerCommand(Handler):
