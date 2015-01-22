@@ -3,29 +3,33 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=4 sw=4 et sts=4 ai:
 
+import cStringIO as StringIO
+import copy
 import httplib
+import os.path
+import platform
+import pprint
+import re
+import signal
+import socket
+import subprocess
 import sys
+import tempfile
+import threading
 import time
+import traceback
 import urllib
 import urllib2
 
-import signal
 try:
     import simplejson
 except ImportError:
     import json as simplejson
 
+from multiprocessing.pool import ThreadPool
+
 METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 
-import copy
-import re
-
-import cStringIO as StringIO
-import traceback
-import tempfile
-
-import os.path
-from multiprocessing.pool import ThreadPool
 
 def compare(old, new, handler, name=""):
     """
@@ -470,7 +474,6 @@ class MetadataHandler(object):
     __getitem__ = get
 
 
-import threading
 
 
 class Error(Exception):
@@ -548,10 +551,6 @@ class MetadataWatcher(threading.Thread):
             self.metadata.update(new_metadata)
             self.last_etag = etag
 
-import socket
-import platform
-import pprint
-
 class Server(object):
     CALLBACK_URL="project.attributes.callback"
 
@@ -587,7 +586,6 @@ Current project metadata:
         print "=+"*30
 
 
-import subprocess
 
 
 
@@ -822,8 +820,8 @@ def Printer(name, old_value, new_value):
 
 
 if __name__ == "__main__":
-    #import doctest
-    #doctest.testmod()
+    import doctest
+    doctest.testmod()
 
     watcher = MetadataWatcher()
     server = Server(watcher)
