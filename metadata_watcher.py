@@ -772,7 +772,7 @@ class HandlerDiskBase(Handler):
             raise Exception("Disk with id %r not found on instance %r" % (
                 disk_id, self.metadata['instance.disks']))
 
-    def mount(self, value):
+    def mount(self, _, value):
         assert 'mount-point' in value, value
         assert 'disk-id' in value, value
         self.assert_disk_attached(value['disk-id'])
@@ -798,7 +798,7 @@ class HandlerDiskBase(Handler):
 
         return success, output
 
-    def umount(self, value):
+    def umount(self, _, value):
         assert 'mount-point' in value
         assert 'disk-id' in value
         self.assert_disk_attached(value['disk-id'])
