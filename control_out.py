@@ -20,6 +20,7 @@ def reltime(starttime=time.time()):
 def NoDash(string):
   return string.replace('-', '_')
 
+from testbinaries import TEST_BINARIES
 
 # Basic wrapper around the gcloud commands
 # --------------------------------------------------------
@@ -117,6 +118,7 @@ class Instance(object):
     ssh.close()
     if returncode != 0:
       raise subprocess.CalledProcessError(returncode, command, stdout + stderr)
+    return stdout
 
   def wait_until_ready(self):
     while True:
@@ -362,6 +364,57 @@ class BuildStage(Stage):
     instance.run("sleep 150")
 
 
+class TestStage(Stage):
+  def __init__(self, commit_id, test_binaries, total_shards=1, shard_index=0):
+    Stage.__init__(self, commit_id)
+    self.test_binaries = test_binaries
+    self.total_shards = total_shards
+    self.shard_index = shard_index
+
+  def disks(self, driver):
+    return [
+      Disk(
+        driver=driver,
+        content="src",
+        commit_id=self.commit_id,
+        stage=self.name(),
+        from_snapshot=SnapshotName(self.commit_id, "src"),
+        mode="READ_ONLY",
+      ),
+      Disk(
+        driver=driver,
+        content="out",
+        commit_id=self.commit_id,
+        stage=self.name(),
+        from_snapshot=SnapshotName(self.commit_id, "out"),
+      ),
+    ]
+
+  def command(self, instance):
+    shard_variables = ('GTEST_TOTAL_SHARDS=%(total)d GTEST_SHARD_INDEX=%(index)d '
+                       % {'total': self.total_shards, 'index': self.shard_index})
+    xvfb_command = 'xvfb-run --server-args=\'-screen 0, 1024x768x24\' '
+    command = ' && '.join(
+      [
+        'sudo apt-get install xvfb -y',
+        'chromium/src/build/update-linux-sandbox.sh',
+        'export CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox',
+      ] +
+      [shard_variables + xvfb_command +
+       ('chromium/src/out/Debug/%(test_binary)s --gtest_output="xml:%(test_binary)s.xml"'
+        % {'test_binary': b}) for b in self.test_binaries])
+    self.log('Test command: ' + command)
+    instance.run(command)
+
+    for test_binary in self.test_binaries:
+      cat_command = 'cat %(test_binary)s.xml' % {'test_binary': test_binary}
+      result = instance.run(cat_command)
+      # Sometimes the output is not piped back correctly. Try it a few times.
+      if not result:
+        result = instance.run(cat_command)
+      if not result:
+        result = instance.run(cat_command)
+      open(InstanceName(self.name(), self.commit_id) + '-' + test_binary, 'w').write(result)
 
 def get_commits_fake():
     return list(reversed(list(c.strip()[:12] for c in file("queue/our-commits.txt", "r").readlines())))
@@ -380,6 +433,8 @@ if __name__ == "__main__":
   for c in commits[1:]:
     stages.append(SyncStage(c, sync_from=latest_sync_snapshot))
     stages.append(BuildStage(c, build_from=latest_build_snapshot))
+    # This needs to be sharded out.
+    # stages.append(TestStage(c, [TEST_BINARIES]))
     latest_sync_snapshot = SnapshotName(c, "src")
 
   print "---"
