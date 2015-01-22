@@ -602,14 +602,17 @@ class Handler(object):
         func = None
         try:
             if old_value is None:
-                func = self.add
-                success, output = self.add(new_value, **kw)
+                if hasattr(self, 'add'):
+                    func = self.add
+                    success, output = self.add(new_value, **kw)
             elif new_value is None:
-                func = self.remove
-                success, output = self.remove(old_value, **kw)
+                if hasattr(self, 'remove'):
+                    func = self.remove
+                    success, output = self.remove(old_value, **kw)
             elif new_value != old_value:
-                func = self.change
-                success, output = self.change(old_value, new_value, **kw)
+                if hasattr(self, 'change'):
+                    func = self.change
+                    success, output = self.change(old_value, new_value, **kw)
             else:
                 assert False
         except Exception, e:
@@ -650,6 +653,7 @@ class Handler(object):
         return retcode
 
     NAMESPACE = None
+    """
     def add(self, value):
         pass
 
@@ -658,21 +662,32 @@ class Handler(object):
 
     def change(self, old_value, new_value):
         pass
-
+    """
 
 class HandlerAsync(Handler):
     WORKERS=10
 
+    @property
+    def metadata(self):
+        if threading.currentThread() != self.thread:
+            raise SystemError("Can't access metadata when async.")
+        else:
+            return self.__metadata
+
+    @metadata.setter
+    def metadata(self, value):
+        self.__metadata = value
+
     def __init__(self, *args, **kw):
         self.pool = ThreadPool(self.WORKERS)
+        self.thread = threading.currentThread()
         Handler.__init__(self, *args, **kw)
-        self.__metadata = self.metadata
-        del self.metadata
 
     def __call__(self, *args, **kw):
         kw['metadata'] = copy.deepcopy(self.__metadata.get(None))
         self.pool.apply_async(Handler.__call__, [self]+list(args), kw)
 
+    """
     def add(self, value, metadata=None):
         pass
 
@@ -681,7 +696,7 @@ class HandlerAsync(Handler):
 
     def change(self, old_value, new_value, metadata=None):
         pass
-
+    """
 
 class HandlerLongCommand(HandlerAsync):
     NAMESPACE = "instance.attributes.long-commands\[\]"
@@ -774,7 +789,7 @@ class HandlerDiskBase(Handler):
                 found = True
                 success &= (0 == self.run_helper("umount %s" % value['mount-point'], output))
 
-        return found and success, output
+        return (found and success), output
 
 
 class HandlerMount(HandlerDiskBase):
