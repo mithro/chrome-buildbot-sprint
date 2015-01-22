@@ -7,12 +7,19 @@ import sys
 sys.path.append("third_party/backports")
 sys.path.append("third_party/libcloud")
 
+import md5
 import getpass
 import subprocess
+import urllib2
+import pprint
+try:
+  import simplejson
+except ImportError:
+  import json as simplejson
 
 BUILD_PLATFORM = "linux"
 SHARED_COMMANDS = {
-  'depot_tools_path': 'export PATH=~/chromium/depot_tools:"$PATH"',
+  'depot_tools_path': 'export PATH=/mnt/chromium/depot_tools:"$PATH"',
 }
 
 import time
@@ -31,7 +38,6 @@ from testbinaries import TEST_BINARIES
 from libcloud.common.google import ResourceNotFoundError
 from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
-from libcloud.compute.ssh import ParamikoSSHClient as SSHClient
 
 # HACK: Extend the request timeout to 10 minutes up from 3 minutes.
 from libcloud.common.google import GoogleBaseConnection
@@ -45,8 +51,7 @@ SERVICE_ACCOUNT_EMAIL = '621016184110-tpkj4skaep6c8ccgolhoheepffasa9kq@developer
 SERVICE_ACCOUNT_KEY_PATH = 'keys/chrome-buildbot-sprint-c514ee5826d1.pem'
 SCOPES = ['https://www.googleapis.com/auth/compute']
 
-SSH_KEY_PATH = 'keys/gce_bot_rsa'
-STARTUP_SCRIPT = 'keys/authorize_ssh_key.sh'
+STARTUP_SCRIPT = 'metadata_watcher.py'
 
 ComputeEngine = get_driver(Provider.GCE)
 def new_driver():
@@ -65,9 +70,6 @@ def SnapshotReady(driver, snapshot_name):
     return ss.status == 'READY'
   except ResourceNotFoundError:
     return False
-
-def ImageName():
-  return 'boot-image-wip'
 
 # Naming
 def DiskName(stage, commit, content):
@@ -121,7 +123,9 @@ class Timer(object):
 
 class Instance(object):
   def log(self, s, *args):
-    print reltime(), "%s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
+    if args:
+      s = s % args
+    print reltime(), "%s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s
 
   def __init__(self, driver, stage, commit_id):
     self.driver = driver
@@ -141,53 +145,66 @@ class Instance(object):
     except ResourceNotFoundError:
       return False
 
+  def update_metadata(self, new_data, node=None):
+    self.log("upating metadata with %s", new_data)
+    self.timer.start("update_metadata")
+    node = node or self.driver.ex_get_node(self.name)
+
+    metadata = {}
+    for d in node.extra['metadata']['items']:
+      metadata[d['key']] = d['value']
+    metadata.update(new_data)
+    self.driver.ex_set_node_metadata(node, metadata)
+    self.timer.stop("update_metadata")
+
   def launch(self, machine_type, disks):
     self.timer.start("launch")
-    self.node = self.driver.deploy_node(self.name, size=machine_type, image=ImageName(), script=STARTUP_SCRIPT)
+    node = self.driver.deploy_node(self.name, size=machine_type, image='boot-image-wip-2', script=STARTUP_SCRIPT, ex_tags=['http-server'])
+    self.log('Public IPs: %s', ["http://%s/tmp" % i for i in node.public_ips])
     for disk in disks:
-      self.driver.attach_volume(self.node, self.driver.ex_get_volume(disk.name), disk.name, disk.mode)
+      self.driver.attach_volume(node, self.driver.ex_get_volume(disk.name), disk.name, disk.mode)
     self.disks = disks
+    while True:
+      try:
+        urllib2.urlopen("http://%s/tmp" % (node.public_ips[0])).read()
+        break
+      except (urllib2.HTTPError, urllib2.URLError) as e:
+        time.sleep(1)
     self.timer.stop("launch")
 
   def run(self, command):
+    tmpfile = md5.md5(command).hexdigest()
     self.log("running %r", command)
     self.timer.start("run_command")
     node = self.driver.ex_get_node(self.name)
-    ssh = SSHClient(node.public_ips[0], username='ubuntu', key=SSH_KEY_PATH)
-    ssh.connect()
-    stdout, stderr, returncode = ssh.run(command)
-    ssh.close()
-    if returncode != 0:
-      raise subprocess.CalledProcessError(returncode, command, stdout + stderr)
-    self.timer.stop("run_command")
-    return stdout
-
-  def wait_until_ready(self):
-    self.timer.start("wait_for_ssh")
+    self.update_metadata({'long-commands': simplejson.dumps([
+          {'cmd': command, 
+           'user':'ubuntu', 
+           'output-file':'/tmp/%s' % tmpfile},
+        ])}, node)
     while True:
       try:
-        self.run("true")
+        self.log(pprint.pformat(
+          simplejson.loads(
+            urllib2.urlopen("http://%s/tmp/%s" % (node.public_ips[0], tmpfile)).read()
+            )))
         break
-      except Exception, e:
-        self.log("waiting %s", e)
-        time.sleep(0.5)
-    self.timer.stop("wait_for_ssh")
+      except (urllib2.HTTPError, urllib2.URLError) as e:
+        time.sleep(1)
+    self.timer.stop("run_command")
 
   def mount_disks(self):
     # Mount the disks into the VM
     self.timer.start("mounting_disks")
-    cmd = ""
+    disk_mnt = []
     for disk in self.disks:
-      cmd += """\
-mkdir -p %(mnt)s; \
-sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
-""" % {"name": disk.name, "mnt": disk.mnt}
-    self.run(cmd)
+      disk_mnt.append({'disk-id': disk.name, 'mount-point': disk.mnt, 'user': 'ubuntu'})
+    self.update_metadata({'mount': simplejson.dumps(disk_mnt)})
     self.timer.stop("mounting_disks")
 
   def shutdown(self):
     self.timer.start("shutdown")
-    self.run("sudo shutdown -h now")
+    self.update_metadata({'shutdown': simplejson.dumps(time.time())})
     try:
       while self.driver.ex_get_node(self.name).state == 'RUNNING':
         time.sleep(1)
@@ -197,13 +214,15 @@ sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
 
   def delete(self):
     self.timer.start("delete")
-    self.driver.destroy_node(self.driver.ex_get_node(self.name), destroy_boot_disk=True)
+    self.driver.destroy_node(self.driver.ex_get_node(self.name))
     self.timer.stop("delete")
 
 
 class Disk(object):
   def log(self, s, *args):
-    print reltime(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
+    if args:
+      s = s % args
+    print reltime(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s
 
   def __init__(self, driver, content, commit_id, stage, from_snapshot, mode="READ_WRITE", save_snapshot=False):
     self.driver = driver
@@ -229,8 +248,8 @@ class Disk(object):
   @property
   def mnt(self):
     return {
-      "src": "chromium",
-      "out": "chromium/src/out",
+      "src": "/mnt/chromium",
+      "out": "/mnt/chromium/src/out",
     }[self.content]
 
   def exists(self):
@@ -253,6 +272,8 @@ class Disk(object):
     self.timer.start("clean_up")
     if self.exists():
       self.timer.start("clean_up_disk")
+      while self.driver.ex_get_volume(self.name).extra['status'] != "READY":
+        time.sleep(1)
       self.driver.destroy_volume(self.driver.ex_get_volume(self.name))
       self.timer.stop("clean_up_disk")
       self.log("deleted disk %s", self.name)
@@ -281,7 +302,9 @@ class Disk(object):
 
 class Stage(threading.Thread):
   def log(self, s, *args):
-    print reltime(), repr(self), s % args if args else s
+    if args:
+      s = s % args
+    print reltime(), repr(self), s
 
   @classmethod
   def name(cls):
@@ -335,7 +358,6 @@ class Stage(threading.Thread):
 
       self.timer.start("ready_instance")
       instance.launch(self.machine_type, disks)
-      instance.wait_until_ready()
       instance.mount_disks()
       self.timer.stop("ready_instance")
 
@@ -403,7 +425,7 @@ class SyncStage(Stage):
   def command(self, instance):
     instance.run(' && '.join([
       SHARED_COMMANDS['depot_tools_path'],
-      'cd chromium/src',
+      'cd /mnt/chromium/src',
       'time gclient sync -r ' + self.commit_id,
     ]))
 
@@ -443,7 +465,7 @@ class BuildStage(Stage):
   def command(self, instance):
     instance.run(' && '.join([
       SHARED_COMMANDS['depot_tools_path'],
-      'cd chromium/src',
+      'cd /mnt/chromium/src',
       'time build/gyp_chromium',
       'time ninja -C out/Debug',
     ]))
@@ -542,7 +564,7 @@ if __name__ == "__main__":
   print "---"
   print "---"
 
-  raw_input("Run things? [Y/y]")
+  # raw_input("Run things? [Y/y]")
 
   all_finished_stages = []
   while stages:

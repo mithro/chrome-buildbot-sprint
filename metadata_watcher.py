@@ -594,9 +594,6 @@ Current project metadata:
         print "=+"*30
 
 
-
-
-
 class Handler(object):
     def __init__(self, server, metadata_watcher):
         assert self.NAMESPACE, "%s must set NAMESPACE class attribute" % (self.__class__)
@@ -634,12 +631,15 @@ class Handler(object):
             tb.seek(0)
             output.append(tb.getvalue())
         finally:
-            self.post({
+            data = {
                 "type": "finished",
                 "function": "%r" % func,
                 "success": success,
                 "output": "\n".join(output),
-                })
+                }
+            if new_value and 'output-file' in new_value:
+                open(new_value['output-file'], 'w').write(simplejson.dumps(data))
+            self.post(data)
 
     def post(self, data):
         data.update({
@@ -711,8 +711,15 @@ class HandlerAsync(Handler):
 
 class HandlerLongCommand(HandlerAsync):
     NAMESPACE = r"instance\.attributes\.long-commands\[\]"
-    def add(self, name, cmd, metadata=None):
+    def add(self, name, value, metadata=None):
         assert metadata is not None
+        assert 'cmd' in value
+        if isinstance(value['cmd'], unicode):
+            value['cmd'] = value['cmd'].encode('utf-8')
+        if 'user' in value:
+            cmd = "su %s -c %r" % (value['user'], value['cmd'])
+        else:
+            cmd = value['cmd']
         output = []
         output.append("="*80)
         output.append("Running: %r" % cmd)
@@ -857,8 +864,16 @@ class HandlerCommand(Handler):
     NAMESPACE = r"instance\.attributes\.commands\[\]"
 
     def add(self, name, value):
+        assert 'cmd' in value
+        if isinstance(value['cmd'], unicode):
+            value['cmd'] = value['cmd'].encode('utf-8')
+        if 'user' in value:
+            cmd = "su %s -c %r" % (value['user'], value['cmd'])
+        else:
+            cmd = value['cmd']
+
         output = []
-        return 0 == self.run_helper(value, output), output
+        return 0 == self.run_helper(cmd, output), output
 
 
 def Printer(name, old_value, new_value):
