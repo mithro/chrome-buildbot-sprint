@@ -116,7 +116,7 @@ class Timer(object):
 
 class Instance(object):
   def log(self, s, *args):
-    print reltime(), "%s %s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
+    print reltime(), "%s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
 
   def __init__(self, driver, stage, commit_id):
     self.driver = driver
@@ -277,7 +277,7 @@ class Disk(object):
 
 class Stage(threading.Thread):
   def log(self, s, *args):
-    print reltime(), repr(self), s % args
+    print reltime(), repr(self), s % args if args else s
 
   @classmethod
   def name(cls):
