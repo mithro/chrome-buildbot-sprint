@@ -169,6 +169,18 @@ import collections
 import threading
 import traceback
 
+class Timer(object):
+  def __init__(self):
+    self.start_times = {}
+    self.durations = {}
+
+  def start(self, name):
+    self.start_times[name] = time.time()
+
+  def end(self, name):
+    self.durations[name] = time.time() - self.start_times[name]
+
+
 class Disk(object):
   def __init__(self, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
     self.content = content
@@ -179,7 +191,7 @@ class Disk(object):
     self.mode = mode
     self.save_snapshot = save_snapshot
 
-    self.durations = {}
+    self.timer = Timer()
 
   def log(self, s, *args):
     print time.time(), "%s(%s): disk(%s)" % (self.stage, self.commit_id, self.name), s % args
@@ -208,32 +220,34 @@ class Disk(object):
 
   def create(self):
     self.log("creating disk")
-    start_create_time = time.time()
     assert not self.exists()
+    self.timer.start('create')
     CreateDiskFromSnapshot(self.name, self.from_snapshot)
-    self.durations['create'] = time.time() - start_create_time
+    self.timer.end('create')
     self.log("created disk")
 
   def cleanup(self, clear_snapshot=False):
-    start_clean_up_time = time.time()
+    self.timer.start('clean_up')
     if self.exists():
-      start_clean_up_disk_time = time.time()
+      self.timer.start('clean_up_disk')
       DeleteDisk(self.name)
-      self.durations['clean_up_disk'] = time.time() - start_clean_up_disk_time
+      self.timer.end('clean_up_disk')
       self.log("deleted disk")
 
     if clear_snapshot and self.save_snapshot:
       if SnapshotReady(self.snapshot_name):
-        start_clean_up_snapshot_time = time.time()
+        self.timer.start('clean_up_snapshot')
         DeleteSnapshot(self.snapshot_name)
-        self.durations['clean_up_snapshot'] = time.time() - start_clean_up_snapshot_time
+        self.timer.end('clean_up_snapshot')
         self.log("deleted snapshot %s", self.snapshot_name)
-    self.durations['clean_up'] = time.time() - start_clean_up_time
+    self.timer.end('clean_up')
 
   def save(self):
     if self.save_snapshot:
       self.log("creating snapshot %s", self.snapshot_name)
+      self.timer.start('saving_snapshot')
       SnapshotDisk(self.name, self.snapshot_name)
+      self.timer.end('saving_snapshot')
       self.log("created snapshot %s", self.snapshot_name)
 
   def saved(self):
@@ -250,7 +264,7 @@ class Stage(threading.Thread):
     self.commit_id = commit_id
     self.instance_name = InstanceName(self.name(), self.commit_id)
 
-    self.durations = {}
+    self.timer = Timer()
 
   def log(self, s, *args):
     print time.time(), repr(self), s % args
@@ -275,8 +289,8 @@ class Stage(threading.Thread):
     return True
 
   def run(self):
-    start_run_time = time.time()
     self.log("running")
+    self.timer.start('run')
 
     # Check we are not already completed or currently running.
     assert not self.done()
@@ -284,18 +298,19 @@ class Stage(threading.Thread):
 
     disks = self.disks
     try:
-      start_create_disks_time = time.time()
+      self.timer.start('create_disks')
       for disk in disks:
         disk.create()
-      self.durations['create_disks'] = time.time() - start_create_disks_time
+      self.timer.end('create_disks')
 
       # Start up the instance and wait for it to be running.
-      start_create_instance_time = time.time()
       self.log("instance (%s) launching", self.instance_name)
+      self.timer.start('create_instance')
       CreateInstanceWithDisks(self.instance_name, ImageName(), self.machine_type, disks)
+      self.timer.end('create_instance')
       self.log("instance (%s) launched", self.instance_name)
-      self.durations['create_instance'] = time.time() - start_create_instance_time
 
+      self.timer.start('wait_for_ssh')
       start_wait_for_ssh_time = time.time()
       while True:
         try:
@@ -303,10 +318,11 @@ class Stage(threading.Thread):
           break
         except subprocess.CalledProcessError:
           time.sleep(1)
-      self.durations['wait_for_ssh'] = time.time() - start_wait_for_ssh_time
+      self.timer.end('wait_for_ssh')
       self.log("instance (%s) running", self.instance_name)
 
       # Mount the disks into the VM
+      self.timer.start('mount_disks')
       start_mount_disks_time = time.time()
       cmd = ""
       for disk in disks:
@@ -315,27 +331,27 @@ mkdir -p %(mnt)s; \
 sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
 """ % {"name": disk.name, "mnt": disk.mnt}
       RunCommandOnInstance(self.instance_name, cmd)
-      self.durations['mount_disks'] = time.time() - start_mount_disks_time
+      self.timer.end('mount_disks')
       self.log("disks mounted")
 
       # Running the actual work command
       self.log("command commence")
-      start_command_time = time.time()
+      self.timer.start('command')
       self.command()
-      self.durations['command'] = time.time() - start_command_time
+      self.timer.end('command')
       self.log("command complete")
 
       # Shutdown instance
-      start_shutdown_time = time.time()
+      self.timer.start('shutdown')
       ShutdownInstance(self.instance_name)
-      self.durations['shutdown'] = time.time() - start_shutdown_time
+      self.timer.end('shutdown')
       self.log("instance (%s) terminated", self.instance_name)
 
       # Create snapshot
-      start_save_disks_time = time.time()
+      self.timer.start('save_disks')
       for disk in disks:
         disk.save()
-      self.durations['save_disks'] = time.time() - start_save_disks_time
+      self.timer.end('save_disks')
       self.log("disks saved")
 
     except Exception, e:
@@ -347,20 +363,22 @@ sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
 
     self.log("finalizing")
     # Delete instance
-    start_delete_instance_time = time.time()
+    self.timer.start('delete_instance')
     if InstanceExists(self.instance_name):
       DeleteInstance(self.instance_name)
       self.log("instance (%s) deleted", self.instance_name)
-    self.durations['delete_instance'] = time.time() - start_delete_instance_time
+    self.timer.end('delete_instance')
 
     # Cleanup disks
     start_clean_up_disks_time = time.time()
+    self.timer.start('clean_up_disks')
     for disk in disks:
       disk.cleanup()
-    self.durations['clean_up_disks'] = time.time() - start_clean_up_disks_time
+    self.timer.end('clean_up_disks')
     self.log("disks deleted")
 
-    self.durations['disks'] = [disk.durations for disk in disks]
+    self.timer.end('run')
+    self.timer.durations['disks'] = [disk.timer.durations for disk in disks]
 
 
 class SyncStage(Stage):
@@ -511,6 +529,23 @@ if __name__ == "__main__":
 
   print 'All stages complete'
   import pprint
+  import collections
+  total_stage_durations = collections.defaultdict(lambda: 0)
+  total_disk_durations = collections.defaultdict(lambda: 0)
   for stage in finished_stages:
-    print stage
-    pprint.pprint(stage.durations, width=1)
+    stage_durations = stage.timer.durations
+    for name, duration in stage_durations.items():
+      if name == 'disks':
+        continue
+      total_stage_durations[name] += duration
+    for disk_durations in stage_durations['disks']:
+      for name, duration in disk_durations.items():
+        total_disk_durations[name] += duration
+    print stage, 'durations'
+    pprint.pprint(stage_durations, width=1)
+    print
+  print 'Total stage durations:'
+  pprint.pprint(dict(total_stage_durations), width=1)
+  print
+  print 'Total disk durations:'
+  pprint.pprint(dict(total_disk_durations), width=1)
