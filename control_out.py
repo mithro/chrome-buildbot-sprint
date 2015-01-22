@@ -184,13 +184,18 @@ class Instance(object):
         ])}, node)
     while True:
       try:
-        self.log(pprint.pformat(
-          simplejson.loads(
+        result = simplejson.loads(
             urllib2.urlopen("http://%s/tmp/%s" % (node.public_ips[0], tmpfile)).read()
-            )))
+            )
+        self.log('Last 50 lines of output\n%s\n%s\n%s\n', '-'*80, '\n'.join(result['output'].split('\n')[-50:]), '-'*80)
+        self.log('command %s was successful? %s', command, result['success'])
         break
       except (urllib2.HTTPError, urllib2.URLError) as e:
         time.sleep(1)
+      except Exception, e:
+        self.log(e)
+        time.sleep(1)
+
     self.timer.stop("run_command")
 
   def mount_disks(self):
