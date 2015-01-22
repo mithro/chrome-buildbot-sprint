@@ -338,18 +338,20 @@ class MetadataWatcher(threading.Thread):
     def run(self):
         while True:
             params = dict(self.params)
-            params['last_tag'] = self.last_etag
-
+            params['last_etag'] = self.last_etag
             url = '{base_url}?{params}'.format(
                 base_url=METADATA_URL,
                 params=urllib.urlencode(params)
                 )
+
+            print "Fetching %r" % url
             req = urllib2.Request(url, headers={'Metadata-Flavor': 'Google'})
 
             try:
                 response = urllib2.urlopen(req)
                 content = response.read()
                 status = response.getcode()
+                print "Got response %s" % status
             except urllib2.HTTPError as e:
                 content = None
                 status = e.code
@@ -368,12 +370,17 @@ class MetadataWatcher(threading.Thread):
 
 
 def HandlerPrinter(name, old_value, new_value):
+    if isinstance(old_value, dict) or isinstance(new_value, dict):
+        return
+
     if old_value is None:
         print "  Added: %s(%r)" % (name, new_value)
         return
+
     if new_value is None:
         print "Removed: %s(was %r)" % (name, old_value)
         return
+
     else:
         print "Changed: %s(%r -> %r)" % (name, old_value, new_value)
 
