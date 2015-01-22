@@ -21,6 +21,14 @@ import traceback
 import urllib
 import urllib2
 
+import tempfile
+outputfile = open(tempfile.mktemp(prefix="metadata_watcher.%s." % os.getpid(), suffix=".log"), 'w+', 100)
+sys.stdout.close()
+sys.stdout = outputfile
+sys.stderr.close()
+sys.stderr = outputfile
+sys.stdin.close()
+
 try:
     import simplejson
 except ImportError:
