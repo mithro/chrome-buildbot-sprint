@@ -63,13 +63,13 @@ def ImageName():
 
 # Naming
 def DiskName(stage, commit, content):
-  return '-'.join([NoDash(getpass.getuser()), 'disk', NoDash(BUILD_PLATFORM), NoDash(commit), stage, content])
+  return '-'.join([NoDash('alanmerge'), 'disk', NoDash(BUILD_PLATFORM), NoDash(commit), stage, content])
 
 def InstanceName(stage, commit):
-  return '-'.join([NoDash(getpass.getuser()), 'instance', NoDash(BUILD_PLATFORM), NoDash(commit), stage])
+  return '-'.join([NoDash('alanmerge'), 'instance', NoDash(BUILD_PLATFORM), NoDash(commit), stage])
 
 def SnapshotName(commit, content):
-  return '-'.join([NoDash(getpass.getuser()), 'snapshot', NoDash(BUILD_PLATFORM), NoDash(commit), content])
+  return '-'.join([NoDash('alanmerge'), 'snapshot', NoDash(BUILD_PLATFORM), NoDash(commit), content])
 
 
 # --------------------------------------------------------
