@@ -1,3 +1,4 @@
+*.pyc
 libcloud
 *.pem
 *_rsa
