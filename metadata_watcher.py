@@ -219,12 +219,12 @@ def compare(old, new, handler, name=""):
 
         values = lnew + lold
         for v in values:
-            if v in old:
+            if v in lold:
                 old_value = v
             else:
                 old_value = None
 
-            if v in new:
+            if v in lnew:
                 new_value = v
             else:
                 new_value = None
