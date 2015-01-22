@@ -789,11 +789,11 @@ class HandlerShutdown(Handler):
     NAMESPACE = "instance.attributes.shutdown"
 
     def add(self, value):
-        assert value == 1
         output = []
         return 0 == self.run_helper("echo shutdown -h +1", output), output
 
     def remove(self, value):
+        output = []
         return 0 == self.run_helper("echo shutdown -c", output), output
 
 
