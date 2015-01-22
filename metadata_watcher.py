@@ -752,6 +752,10 @@ class HandlerEnvironment(Handler):
         if new_value is None:
             del os.environ[name]
             return
+        if not isinstance(new_value, str):
+            new_value = str(new_value)
+        if isinstance(new_value, unicode):
+            new_value = new_value.encode('utf-8')
         os.environ[name] = new_value
 
 
