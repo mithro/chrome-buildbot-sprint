@@ -501,7 +501,7 @@ class TestStage(Stage):
       open(InstanceName(self.name(), self.commit_id) + '-' + test_binary, 'w').write(result)
 
 def get_commits_fake():
-    return list(reversed(list(c.strip()[:12] for c in file("queue/our-commits.txt", "r").readlines())))
+    return list(reversed(list(c.strip()[:16] for c in file("queue/our-commits.txt", "r").readlines())))
 
 
 if __name__ == "__main__":
