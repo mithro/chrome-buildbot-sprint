@@ -10,3 +10,198 @@ time ninja -C out/Debug
 real    81m20.159s
 user    1213m26.227s
 sys     66m7.911s
+
+
+Syncing and building 4 commits:
+sync(3efbc4188cd3d2dc) durations {
+  create_disks: 101.4s
+  create_instance: 25.6s
+  wait_for_ssh: 23.9s
+  mount_disks: 8.3s
+  command: 121.5s
+  shutdown: 71.6s
+  save_disks: 143.5s
+  delete_instance: 16.7s
+  clean_up_disks: 9.8s
+  run: 522.3s
+}
+<__main__.Disk object at 0x1043b0150> durations {
+  clean_up_snapshot: 12.1s
+  clean_up: 9.8s
+  create: 101.4s
+  saving_snapshot: 143.5s
+  clean_up_disk: 9.8s
+}
+
+sync(2cc83022ff33e4b3) durations {
+  create_disks: 94.6s
+  create_instance: 24.4s
+  wait_for_ssh: 23.9s
+  mount_disks: 7.1s
+  command: 114.9s
+  shutdown: 87.8s
+  save_disks: 143.4s
+  delete_instance: 11.4s
+  clean_up_disks: 8.0s
+  run: 515.6s
+}
+<__main__.Disk object at 0x1043b0650> durations {
+  clean_up: 8.0s
+  create: 94.6s
+  saving_snapshot: 143.4s
+  clean_up_disk: 8.0s
+}
+
+sync(d22f93d643e8717f) durations {
+  create_disks: 94.0s
+  create_instance: 34.6s
+  wait_for_ssh: 21.0s
+  mount_disks: 7.3s
+  command: 114.8s
+  shutdown: 79.9s
+  save_disks: 122.7s
+  delete_instance: 17.4s
+  clean_up_disks: 8.0s
+  run: 499.8s
+}
+<__main__.Disk object at 0x1043b0a50> durations {
+  clean_up: 8.0s
+  create: 94.0s
+  saving_snapshot: 122.7s
+  clean_up_disk: 8.0s
+}
+
+build(3efbc4188cd3d2dc) durations {
+  create_disks: 207.2s
+  create_instance: 30.4s
+  wait_for_ssh: 22.2s
+  mount_disks: 7.3s
+  command: 501.6s
+  shutdown: 158.7s
+  save_disks: 235.0s
+  delete_instance: 11.4s
+  clean_up_disks: 19.5s
+  run: 1193.4s
+}
+<__main__.Disk object at 0x1043b0410> durations {
+  clean_up: 11.6s
+  create: 61.4s
+  clean_up_disk: 11.6s
+}
+<__main__.Disk object at 0x1043b0490> durations {
+  clean_up: 7.9s
+  create: 145.8s
+  saving_snapshot: 235.0s
+  clean_up_disk: 7.9s
+}
+
+sync(90cf1c6008252b6c) durations {
+  create_disks: 83.7s
+  create_instance: 28.9s
+  wait_for_ssh: 20.8s
+  mount_disks: 7.3s
+  command: 119.7s
+  shutdown: 91.6s
+  save_disks: 127.5s
+  delete_instance: 38.3s
+  clean_up_disks: 8.3s
+  run: 526.2s
+}
+<__main__.Disk object at 0x1043b0e50> durations {
+  clean_up: 8.3s
+  create: 83.7s
+  saving_snapshot: 127.5s
+  clean_up_disk: 8.3s
+}
+
+build(2cc83022ff33e4b3) durations {
+  create_disks: 221.1s
+  create_instance: 23.7s
+  wait_for_ssh: 28.3s
+  mount_disks: 8.1s
+  command: 501.9s
+  shutdown: 70.0s
+  save_disks: 226.8s
+  delete_instance: 12.0s
+  clean_up_disks: 19.5s
+  run: 1111.4s
+}
+<__main__.Disk object at 0x1043b0810> durations {
+  clean_up: 8.0s
+  create: 72.0s
+  clean_up_disk: 8.0s
+}
+<__main__.Disk object at 0x1043b0890> durations {
+  clean_up: 11.4s
+  create: 149.2s
+  saving_snapshot: 226.8s
+  clean_up_disk: 11.4s
+}
+
+build(d22f93d643e8717f) durations {
+  create_disks: 233.3s
+  create_instance: 23.5s
+  wait_for_ssh: 27.5s
+  mount_disks: 9.5s
+  command: 474.7s
+  shutdown: 86.1s
+  save_disks: 253.7s
+  delete_instance: 11.9s
+  clean_up_disks: 20.5s
+  run: 1140.7s
+}
+<__main__.Disk object at 0x1043b0c10> durations {
+  clean_up: 11.8s
+  create: 83.7s
+  clean_up_disk: 11.8s
+}
+<__main__.Disk object at 0x1043b0c90> durations {
+  clean_up: 8.7s
+  create: 149.6s
+  saving_snapshot: 253.7s
+  clean_up_disk: 8.7s
+}
+
+build(90cf1c6008252b6c) durations {
+  create_disks: 210.2s
+  create_instance: 23.5s
+  wait_for_ssh: 30.3s
+  mount_disks: 7.2s
+  command: 513.5s
+  shutdown: 139.4s
+  save_disks: 221.3s
+  delete_instance: 12.0s
+  clean_up_disks: 16.5s
+  run: 1173.8s
+}
+<__main__.Disk object at 0x1043b3050> durations {
+  clean_up: 8.3s
+  create: 66.6s
+  clean_up_disk: 8.3s
+}
+<__main__.Disk object at 0x1043b30d0> durations {
+  clean_up: 8.2s
+  create: 143.6s
+  saving_snapshot: 221.3s
+  clean_up_disk: 8.2s
+}
+
+Total stage durations: {
+  create_disks: 1245.5s
+  create_instance: 214.5s
+  wait_for_ssh: 198.0s
+  mount_disks: 62.2s
+  command: 2462.7s
+  shutdown: 785.2s
+  save_disks: 1473.9s
+  delete_instance: 131.1s
+  clean_up_disks: 109.9s
+  run: 6683.1s
+}
+Total disk durations: {
+  clean_up_snapshot: 12.1s
+  clean_up: 109.9s
+  create: 1245.5s
+  saving_snapshot: 1473.9s
+  clean_up_disk: 109.9s
+}
