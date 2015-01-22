@@ -133,9 +133,8 @@ class Instance(object):
     cmd = ""
     for disk in self.disks:
       cmd += """\
-sudo mkdir -p %(mnt)s; \
+mkdir -p %(mnt)s; \
 sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
-sudo chmod a+rw %(mnt)s; \
 """ % {"name": disk.name, "mnt": disk.mnt}
     self.run(cmd)
     self.log("disks mounted")
@@ -153,7 +152,7 @@ sudo chmod a+rw %(mnt)s; \
 
   def delete(self):
     self.log("deleting")
-    self.driver.destroy_node(self.driver.ex_get_node(self.name))
+    self.driver.destroy_node(self.driver.ex_get_node(self.name), destroy_boot_disk=True)
     self.log("deleted")
 
 
@@ -184,8 +183,8 @@ class Disk(object):
   @property
   def mnt(self):
     return {
-      "src": "/mnt/disk",
-      "out": "/mnt/disk/chromium/src/out",
+      "src": "chromium",
+      "out": "chromium/src/out",
     }[self.content]
 
   def exists(self):
@@ -241,6 +240,8 @@ class Stage(threading.Thread):
     assert self.name() is not Stage.name()
     self.commit_id = commit_id
 
+    self.run_complete = False
+
   def __repr__(self):
     return "%s(%s)" % (self.name(), self.commit_id)
 
@@ -254,7 +255,7 @@ class Stage(threading.Thread):
     for disk in self.disks(driver):
       if not disk.saved():
         return False
-    return True
+    return self.run_complete
 
   def instance(self, driver):
     return Instance(driver, self.name(), self.commit_id)
@@ -303,6 +304,9 @@ class Stage(threading.Thread):
       for disk in disks:
         disk.cleanup()
       self.log("disks deleted")
+    self.log("disks deleted")
+
+    self.run_complete = True
 
 
 class SyncStage(Stage):
