@@ -42,10 +42,10 @@ REGION = 'us-central1'
 ZONE = 'us-central1-a'
 
 SERVICE_ACCOUNT_EMAIL = '621016184110-tpkj4skaep6c8ccgolhoheepffasa9kq@developer.gserviceaccount.com'
-SERVICE_ACCOUNT_KEY_PATH = 'chrome-buildbot-sprint-c514ee5826d1.pem'
+SERVICE_ACCOUNT_KEY_PATH = 'keys/chrome-buildbot-sprint-c514ee5826d1.pem'
 SCOPES = ['https://www.googleapis.com/auth/compute']
 
-SSH_KEY_PATH = 'gce_bot_rsa'
+SSH_KEY_PATH = 'keys/gce_bot_rsa'
 STARTUP_SCRIPT = 'startup_script.sh'
 
 ComputeEngine = get_driver(Provider.GCE)

@@ -1,5 +1,4 @@
 google_appengine/
 libcloud/
+keys/
 *.pyc
-*.pem
-*_rsa
