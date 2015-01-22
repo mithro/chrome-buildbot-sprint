@@ -621,6 +621,7 @@ class Handler(object):
             output.append(tb.getvalue())
         finally:
             self.post({
+                "type": "finished",
                 "function": "%r" % func,
                 "success": success,
                 "output": "\n".join(output),
@@ -660,12 +661,16 @@ class Handler(object):
 
 
 class HandlerAsync(Handler):
+    WORKERS=10
+
     def __init__(self, *args, **kw):
-        self.pool = ThreadPool()
+        self.pool = ThreadPool(self.WORKERS)
         Handler.__init__(self, *args, **kw)
+        self.__metadata = self.metadata
+        del self.metadata
 
     def __call__(self, *args, **kw):
-        kw['metadata'] = copy.deepcopy(self.metadata.get(None))
+        kw['metadata'] = copy.deepcopy(self.__metadata.get(None))
         self.pool.apply_async(Handler.__call__, [self]+list(args), kw)
 
     def add(self, value, metadata=None):
@@ -783,14 +788,15 @@ class HandlerUnmount(HandlerDiskBase):
 
 
 
-class HandlerShutdown(Handler):
+class HandlerShutdown(HandlerAsync):
+    WORKERS = 2
     NAMESPACE = "instance.attributes.shutdown"
 
-    def add(self, value):
+    def add(self, value, metadata):
         output = []
         return 0 == self.run_helper("shutdown -h +60", output), output
 
-    def remove(self, value):
+    def remove(self, value, metadata):
         output = []
         return 0 == self.run_helper("shutdown -c", output), output
 
