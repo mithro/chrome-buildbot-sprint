@@ -10,6 +10,10 @@ import urllib
 import urllib2
 
 import signal
+try:
+    import simplejson
+except ImportError:
+    import json as simplejson
 
 METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 
@@ -125,6 +129,22 @@ def compare(old, new, handler, name=""):
     a[].b: 1 -> None
     >>>
     """
+    # FIXME: HACKS!?@
+    if isinstance(old, (str, unicode)):
+        if old and old[0] in ('[', '{'):
+            try:
+                old = simplejson.loads(old)
+            except Exception, e:
+		print name, "JSON Error->:", old
+		pass
+    if isinstance(new, (str, unicode)):
+        if new and new[0] in ('[', '{'):
+            try:
+                new = simplejson.loads(new)
+            except Exception, e:
+		print name, "JSON Error->:", new
+		pass
+
     if old == new:
         return
 
@@ -441,10 +461,6 @@ class MetadataHandler(object):
 
 
 import threading
-try:
-    import simplejson
-except ImportError:
-    import json as simplejson
 
 
 class Error(Exception):
