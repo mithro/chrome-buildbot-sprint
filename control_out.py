@@ -70,13 +70,13 @@ def ImageName():
 
 # Naming
 def DiskName(stage, commit, content):
-  return '-'.join([NoDash('alancuttermerge'), 'disk', NoDash(BUILD_PLATFORM), NoDash(commit), stage, content])
+  return '-'.join([NoDash('acmerge'), 'disk', NoDash(BUILD_PLATFORM), NoDash(commit), stage, content])
 
 def InstanceName(stage, commit):
-  return '-'.join([NoDash('alancuttermerge'), 'instance', NoDash(BUILD_PLATFORM), NoDash(commit), stage])
+  return '-'.join([NoDash('acmerge'), 'instance', NoDash(BUILD_PLATFORM), NoDash(commit), stage])
 
 def SnapshotName(commit, content):
-  return '-'.join([NoDash('alancuttermerge'), 'snapshot', NoDash(BUILD_PLATFORM), NoDash(commit), content])
+  return '-'.join([NoDash('acmerge'), 'snapshot', NoDash(BUILD_PLATFORM), NoDash(commit), content])
 
 
 # --------------------------------------------------------
@@ -106,6 +106,10 @@ class Timer(object):
   def update(self, timer):
     for name, durations in timer.named_durations.items():
       self.named_durations.setdefault(name, []).extend(durations)
+
+  def sum(self):
+    for name, durations in self.named_durations.items():
+      self.named_durations[name] = [sum(durations)]
 
   def __str__(self):
     s = '{\n'
@@ -175,7 +179,6 @@ class Instance(object):
       cmd += """\
 mkdir -p %(mnt)s; \
 sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
-chmod a+rw %(mnt)s; \
 """ % {"name": disk.name, "mnt": disk.mnt}
     self.run(cmd)
     self.timer.stop("mounting_disks")
@@ -185,8 +188,7 @@ chmod a+rw %(mnt)s; \
     self.run("sudo shutdown -h now")
     try:
       while self.driver.ex_get_node(self.name).state == 'RUNNING':
-        time.sleep(0.5)
-        pass
+        time.sleep(1)
     except ResourceNotFoundError:
       pass
     self.timer.stop("shutdown")
@@ -520,6 +522,9 @@ if __name__ == "__main__":
       print stage, disk, 'durations', disk_timer
       aggregate_disk_timer.update(disk_timer)
     print
+  aggregate_stage_timer.sum()
+  aggregate_instance_timer.sum()
+  aggregate_disk_timer.sum()
   print 'Total stage durations:', aggregate_stage_timer
   print 'Total instance durations:', aggregate_instance_timer
   print 'Total disk durations:', aggregate_disk_timer
