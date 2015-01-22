@@ -495,6 +495,7 @@ if __name__ == "__main__":
       stages = [s for s in stages if not s in finished_stages]
       all_finished_stages += finished_stages
 
+    running_stages = []
     for stage in stages:
       if stage.can_run(driver) and not stage.is_alive():
         if not stage.done(driver):
@@ -502,7 +503,10 @@ if __name__ == "__main__":
           stage.start()
 
       if stage.is_alive():
-        print reltime(), "Currently running", stage
+        running_stages.append(stage)
+
+    if running_stages:
+      print reltime(), "Currently running stages:", running_stages
 
     time.sleep(10)
 
