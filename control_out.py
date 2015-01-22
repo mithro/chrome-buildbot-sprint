@@ -4,12 +4,12 @@
 # vim: set ts=2 sw=2 et sts=2 ai:
 
 import sys
-sys.path.append("libcloud")
+sys.path.append("third_party/backports")
+sys.path.append("third_party/libcloud")
 
 import getpass
 import subprocess
 
-MACHINE_SIZE = 'n1-standard-1'
 BUILD_PLATFORM = "linux"
 SHARED_COMMANDS = {
   'depot_tools_path': 'export PATH=~/chromium/depot_tools:"$PATH"',

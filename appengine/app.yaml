@@ -12,5 +12,12 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
+- url: /start-instance/?
+  script: start_instance.APP
+
 - url: /.*
   script: helloworld.APP
+
+libraries:
+- name: ssl
+  version: latest
