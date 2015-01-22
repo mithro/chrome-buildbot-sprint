@@ -53,6 +53,38 @@ def compare(old, new, handler, parent=""):
     c: {'e': 4, 'd': 3} -> {'e': 4}
     c.d: 3 -> None
     >>> 
+
+    >>> # Test lists
+    >>> l = {'a': [1, 2, 3]}
+    >>> compare(l, l, onchange)
+    >>> compare(l, {'a': []}, onchange)
+    a: [1, 2, 3] -> []
+    a[]: 1 -> None
+    a[]: 2 -> None
+    a[]: 3 -> None
+    >>> compare({'a': []}, l, onchange)
+    a: [] -> [1, 2, 3]
+    a[]: None -> 1
+    a[]: None -> 2
+    a[]: None -> 3
+    >>> l_add = deepcopy(l)
+    >>> l_add['a'].append(4)
+    >>> compare(l, l_add, onchange)
+    a: [1, 2, 3] -> [1, 2, 3, 4]
+    a[]: None -> 4
+    >>> l_remove = deepcopy(l)
+    >>> l_remove['a'].pop(0)
+    1
+    >>> compare(l, l_remove, onchange)
+    a: [1, 2, 3] -> [2, 3]
+    a[]: 1 -> None
+    >>> l_remove['a'].pop(-1)
+    3
+    >>> compare(l, l_remove, onchange)
+    a: [1, 2, 3] -> [2]
+    a[]: 1 -> None
+    a[]: 3 -> None
+    >>>
     """
     if old is None:
         old = {}
@@ -75,6 +107,23 @@ def compare(old, new, handler, parent=""):
 
         if isinstance(old_value, dict) or isinstance(new_value, dict):
             compare(old_value, new_value, handler, fullname)
+
+        elif isinstance(old_value, (list, tuple)) or isinstance(new_value, (list, tuple)):
+            if not isinstance(new_value, (list, tuple)):
+                new_value = []
+            if not isinstance(old_value, (list, tuple)):
+                old_value = []
+
+            values = new_value + old_value
+            for v in values:
+                if v in old_value and v not in new_value:
+                    handler(sname+"[]", v, None)
+                elif v not in old_value and v in new_value:
+                    handler(sname+"[]", None, v)
+                elif v in old_value and v in new_value:
+                    continue
+                else:
+                    assert False
 
 
 class Handlers(dict):
