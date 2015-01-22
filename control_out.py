@@ -89,7 +89,7 @@ import traceback
 class Timer(object):
   def __init__(self, logger=None):
     self.start_times = {}
-    self.durations = collections.OrderedDict()
+    self.named_durations = collections.OrderedDict()
     self.logger = logger
 
   def start(self, name):
@@ -99,16 +99,20 @@ class Timer(object):
 
   def stop(self, name):
     duration = time.time() - self.start_times[name]
-    self.durations[name] = duration
+    self.named_durations.setdefault(name, []).append(duration)
     if self.logger:
       self.logger.log('%s COMPLETE (%.1fs)', name, duration)
 
   def update(self, timer):
-    for name, duration in timer.durations.items():
-      self.durations[name] = self.durations.get(name, 0) + duration
+    for name, durations in timer.named_durations.items():
+      self.named_durations.setdefault(name, []).extend(durations)
 
   def __str__(self):
-    return '{\n%s}' % ''.join('  %s: %.1fs\n' % item for item in self.durations.items())
+    s = '{\n'
+    for name, durations in self.named_durations.items():
+      s += '  %s: %s\n' % (name, ', '.join('%.1fs' % duration for duration in durations))
+    s += '}'
+    return s
 
 class Instance(object):
   def log(self, s, *args):
@@ -481,11 +485,13 @@ if __name__ == "__main__":
 
   raw_input("Run things? [Y/y]")
 
+  all_finished_stages = []
   while stages:
     finished_stages = [s for s in stages if s.done(driver)]
     if finished_stages:
       print reltime(), "Finished", finished_stages
       stages = [s for s in stages if not s in finished_stages]
+      all_finished_stages += finished_stages
 
     for stage in stages:
       if stage.can_run(driver) and not stage.is_alive():
@@ -505,7 +511,7 @@ if __name__ == "__main__":
   aggregate_stage_timer = Timer()
   aggregate_instance_timer = Timer()
   aggregate_disk_timer = Timer()
-  for stage in finished_stages:
+  for stage in all_finished_stages:
     print stage, 'durations', stage.timer
     aggregate_stage_timer.update(stage.timer)
     print stage, 'instance durations', stage.instance_timer
