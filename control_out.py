@@ -166,13 +166,14 @@ def SnapshotName(commit, content):
 
 import cStringIO as StringIO
 import collections
+import pprint
 import threading
 import traceback
 
 class Timer(object):
   def __init__(self):
     self.start_times = {}
-    self.durations = {}
+    self.durations = collections.OrderedDict()
 
   def start(self, name):
     self.start_times[name] = time.time()
@@ -180,6 +181,12 @@ class Timer(object):
   def end(self, name):
     self.durations[name] = time.time() - self.start_times[name]
 
+  def update(self, timer):
+    for name, duration in timer.durations.items():
+      self.durations[name] = self.durations.get(name, 0) + duration
+
+  def __str__(self):
+    return '{\n%s}' % ''.join('  %s: %.1fs\n' % item for item in self.durations.items())
 
 class Disk(object):
   def __init__(self, content, commit_id, stage, from_snapshot, mode="rw", save_snapshot=False):
@@ -263,7 +270,7 @@ class Stage(threading.Thread):
     assert self.name() is not Stage.name()
     self.commit_id = commit_id
     self.instance_name = InstanceName(self.name(), self.commit_id)
-
+    self.disks = self.get_disks()
     self.timer = Timer()
 
   def log(self, s, *args):
@@ -296,17 +303,16 @@ class Stage(threading.Thread):
     assert not self.done()
     assert not InstanceExists(self.instance_name)
 
-    disks = self.disks
     try:
       self.timer.start('create_disks')
-      for disk in disks:
+      for disk in self.disks:
         disk.create()
       self.timer.end('create_disks')
 
       # Start up the instance and wait for it to be running.
       self.log("instance (%s) launching", self.instance_name)
       self.timer.start('create_instance')
-      CreateInstanceWithDisks(self.instance_name, ImageName(), self.machine_type, disks)
+      CreateInstanceWithDisks(self.instance_name, ImageName(), self.machine_type, self.disks)
       self.timer.end('create_instance')
       self.log("instance (%s) launched", self.instance_name)
 
@@ -325,7 +331,7 @@ class Stage(threading.Thread):
       self.timer.start('mount_disks')
       start_mount_disks_time = time.time()
       cmd = ""
-      for disk in disks:
+      for disk in self.disks:
         cmd += """\
 mkdir -p %(mnt)s; \
 sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
@@ -349,7 +355,7 @@ sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
 
       # Create snapshot
       self.timer.start('save_disks')
-      for disk in disks:
+      for disk in self.disks:
         disk.save()
       self.timer.end('save_disks')
       self.log("disks saved")
@@ -372,26 +378,24 @@ sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
     # Cleanup disks
     start_clean_up_disks_time = time.time()
     self.timer.start('clean_up_disks')
-    for disk in disks:
+    for disk in self.disks:
       disk.cleanup()
     self.timer.end('clean_up_disks')
     self.log("disks deleted")
 
     self.timer.end('run')
-    self.timer.durations['disks'] = [disk.timer.durations for disk in disks]
 
 
 class SyncStage(Stage):
   def __init__(self, commit_id, sync_from):
-    Stage.__init__(self, commit_id)
     self.sync_from = sync_from
+    Stage.__init__(self, commit_id)
 
   @property
   def machine_type(self):
     return 'n1-standard-2'
 
-  @property
-  def disks(self):
+  def get_disks(self):
     return [
       Disk(
         content="src",
@@ -412,15 +416,14 @@ class SyncStage(Stage):
 
 class BuildStage(Stage):
   def __init__(self, commit_id, build_from):
-    Stage.__init__(self, commit_id)
     self.build_from = build_from
+    Stage.__init__(self, commit_id)
 
   @property
   def machine_type(self):
     return 'n1-standard-16'
 
-  @property
-  def disks(self):
+  def get_disks(self):
     return [
       # Figure out the src for this commit
       Disk(
@@ -528,24 +531,14 @@ if __name__ == "__main__":
   print '---'
 
   print 'All stages complete'
-  import pprint
-  import collections
-  total_stage_durations = collections.defaultdict(lambda: 0)
-  total_disk_durations = collections.defaultdict(lambda: 0)
+  aggregate_stage_timer = Timer()
+  aggregate_disk_timer = Timer()
   for stage in finished_stages:
-    stage_durations = stage.timer.durations
-    for name, duration in stage_durations.items():
-      if name == 'disks':
-        continue
-      total_stage_durations[name] += duration
-    for disk_durations in stage_durations['disks']:
-      for name, duration in disk_durations.items():
-        total_disk_durations[name] += duration
-    print stage, 'durations'
-    pprint.pprint(stage_durations, width=1)
+    print stage, 'durations', stage.timer
+    aggregate_stage_timer.update(stage.timer)
+    for disk in stage.disks:
+      aggregate_disk_timer.update(disk.timer)
+      print disk, 'durations', disk.timer
     print
-  print 'Total stage durations:'
-  pprint.pprint(dict(total_stage_durations), width=1)
-  print
-  print 'Total disk durations:'
-  pprint.pprint(dict(total_disk_durations), width=1)
+  print 'Total stage durations:', aggregate_stage_timer
+  print 'Total disk durations:', aggregate_disk_timer
