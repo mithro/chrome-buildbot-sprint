@@ -370,7 +370,7 @@ class MetadataWatcher(threading.Thread):
 
 
 def HandlerPrinter(name, old_value, new_value):
-    if isinstance(old_value, dict) or isinstance(new_value, dict):
+    if isinstance(old_value, (dict, list)) or isinstance(new_value, (dict, list)):
         return
 
     if old_value is None:
