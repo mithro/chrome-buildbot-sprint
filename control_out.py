@@ -46,7 +46,7 @@ SERVICE_ACCOUNT_KEY_PATH = 'keys/chrome-buildbot-sprint-c514ee5826d1.pem'
 SCOPES = ['https://www.googleapis.com/auth/compute']
 
 SSH_KEY_PATH = 'keys/gce_bot_rsa'
-STARTUP_SCRIPT = 'startup_script.sh'
+STARTUP_SCRIPT = 'keys/authorize_ssh_key.sh'
 
 ComputeEngine = get_driver(Provider.GCE)
 def new_driver():

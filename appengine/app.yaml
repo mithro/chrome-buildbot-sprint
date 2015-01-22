@@ -21,3 +21,5 @@ handlers:
 libraries:
 - name: ssl
   version: latest
+- name: pycrypto
+  version: latest
