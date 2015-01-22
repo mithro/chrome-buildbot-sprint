@@ -794,7 +794,7 @@ class HandlerShutdown(HandlerAsync):
 
     def add(self, value, metadata):
         output = []
-        return 0 == self.run_helper("shutdown -h +60", output), output
+        return 0 == self.run_helper("shutdown -h +1", output), output
 
     def remove(self, value, metadata):
         output = []
