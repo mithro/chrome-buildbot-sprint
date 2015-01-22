@@ -604,15 +604,15 @@ class Handler(object):
             if old_value is None:
                 if hasattr(self, 'add'):
                     func = self.add
-                    success, output = self.add(new_value, **kw)
+                    success, output = self.add(name, new_value, **kw)
             elif new_value is None:
                 if hasattr(self, 'remove'):
                     func = self.remove
-                    success, output = self.remove(old_value, **kw)
+                    success, output = self.remove(name, old_value, **kw)
             elif new_value != old_value:
                 if hasattr(self, 'change'):
                     func = self.change
-                    success, output = self.change(old_value, new_value, **kw)
+                    success, output = self.change(name, old_value, new_value, **kw)
             else:
                 assert False
         except Exception, e:
@@ -654,13 +654,13 @@ class Handler(object):
 
     NAMESPACE = None
     """
-    def add(self, value):
+    def add(self, name, value):
         pass
 
-    def remove(self, value):
+    def remove(self, name, value):
         pass
 
-    def change(self, old_value, new_value):
+    def change(self, name, old_value, new_value):
         pass
     """
 
@@ -688,19 +688,20 @@ class HandlerAsync(Handler):
         self.pool.apply_async(Handler.__call__, [self]+list(args), kw)
 
     """
-    def add(self, value, metadata=None):
+    def add(self, name, value, metadata=None):
         pass
 
-    def remove(self, value, metadata=None):
+    def remove(self, name, value, metadata=None):
         pass
 
-    def change(self, old_value, new_value, metadata=None):
+    def change(self, name, old_value, new_value, metadata=None):
         pass
     """
 
 class HandlerLongCommand(HandlerAsync):
-    NAMESPACE = "instance.attributes.long-commands\[\]"
-    def add(self, cmd, metadata=None):
+    NAMESPACE = "instance\\.attributes\\.long-commands\[\]"
+    def add(self, name, cmd, metadata=None):
+        assert name == NAMESPACE
         assert metadata is not None
         output = []
         output.append("="*80)
@@ -730,6 +731,32 @@ class HandlerLongCommand(HandlerAsync):
         output.append("="*80)
         return retcode == 0, output
 
+
+class HandlerEnvironment(Handler):
+    NAMESPACE = r"(instance\.attributes\.env\..*)|(project\.attributes\.env\..*)"
+
+    @staticmethod
+    def trim_name(name):
+        """
+        >>> HandlerEnvironment.trim_name("asdasdasdsa.env.blah")
+        'blah'
+        >>> HandlerEnvironment.trim_name("a.env..env.")
+        '.env.'
+        """
+        i = name.find(".env.")
+        assert i != -1
+        return name[i+5:]
+
+    def add(self, name, value):
+        os.environ[self.trim_name(name)] = value
+
+    def change(self, name, old_value, new_value):
+        name = self.trim_name(name)
+        assert os.environ[name] == old_value
+        os.environ[name] = new_value
+
+    def remove(self, name, value):
+        del os.environ[self.trim_name(name)]
 
 
 class HandlerDiskBase(Handler):
@@ -793,33 +820,35 @@ class HandlerDiskBase(Handler):
 
 
 class HandlerMount(HandlerDiskBase):
-    NAMESPACE = "instance.attributes.mount\[\]"
+    NAMESPACE = r"instance\.attributes\.mount\[\]"
     add = HandlerDiskBase.mount
 
 
 class HandlerUnmount(HandlerDiskBase):
-    NAMESPACE = "instance.attributes.umount\[\]"
+    NAMESPACE = r"instance\.attributes\.umount\[\]"
     add = HandlerDiskBase.umount
-
 
 
 class HandlerShutdown(HandlerAsync):
     WORKERS = 2
-    NAMESPACE = "instance.attributes.shutdown"
+    NAMESPACE = r"instance\.attributes\.shutdown"
 
-    def add(self, value, metadata):
+    def add(self, name, value, metadata):
+        assert name == NAMESPACE
         output = []
         return 0 == self.run_helper("shutdown -h +1", output), output
 
-    def remove(self, value, metadata):
+    def remove(self, name, value, metadata):
+        assert name == NAMESPACE
         output = []
         return 0 == self.run_helper("shutdown -c", output), output
 
 
 class HandlerCommand(Handler):
-    NAMESPACE = "instance.attributes.commands\[\]"
+    NAMESPACE = r"instance\.attributes\.commands\[\]"
 
-    def add(self, value):
+    def add(self, name, value):
+        assert name == NAMESPACE
         output = []
         return 0 == self.run_helper(value, output), output
 
@@ -846,6 +875,7 @@ if __name__ == "__main__":
 
     watcher = MetadataWatcher()
     server = Server(watcher)
+    HandlerEnvironment(server, watcher)
     HandlerMount(server, watcher)
     HandlerUnmount(server, watcher)
     HandlerCommand(server, watcher)
