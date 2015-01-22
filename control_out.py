@@ -17,7 +17,7 @@ SHARED_COMMANDS = {
 
 import time
 def reltime(starttime=time.time()):
-  return time.time() - starttime
+  return "[%.1fs]" % (time.time() - starttime)
 
 
 def NoDash(string):
@@ -112,7 +112,7 @@ class Timer(object):
 
 class Instance(object):
   def log(self, s, *args):
-    print reltime(), "%s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
+    print reltime(), "%s %s(%s): instance(%s)" % (self.stage, self.commit_id, self.name), s % args
 
   def __init__(self, driver, stage, commit_id):
     self.driver = driver
@@ -169,9 +169,9 @@ class Instance(object):
     cmd = ""
     for disk in self.disks:
       cmd += """\
-sudo mkdir -p %(mnt)s; \
+mkdir -p %(mnt)s; \
 sudo mount /dev/disk/by-id/google-%(name)s %(mnt)s; \
-sudo chmod a+rw %(mnt)s; \
+chmod a+rw %(mnt)s; \
 """ % {"name": disk.name, "mnt": disk.mnt}
     self.run(cmd)
     self.timer.stop("mounting_disks")
@@ -221,8 +221,8 @@ class Disk(object):
   @property
   def mnt(self):
     return {
-      "src": "/mnt/disk",
-      "out": "/mnt/disk/chromium/src/out",
+      "src": "chromium",
+      "out": "chromium/src/out",
     }[self.content]
 
   def exists(self):
@@ -391,7 +391,11 @@ class SyncStage(Stage):
     ]
 
   def command(self, instance):
-    instance.run("sleep 30")
+    instance.run(' && '.join([
+      SHARED_COMMANDS['depot_tools_path'],
+      'cd chromium/src',
+      'time gclient sync -r ' + self.commit_id,
+    ]))
 
 
 class BuildStage(Stage):
@@ -427,8 +431,12 @@ class BuildStage(Stage):
     ]
 
   def command(self, instance):
-    instance.run("sleep 150")
-
+    instance.run(' && '.join([
+      SHARED_COMMANDS['depot_tools_path'],
+      'cd chromium/src',
+      'time build/gyp_chromium',
+      'time ninja -C out/Debug',
+    ]))
 
 
 def get_commits_fake():
@@ -488,7 +496,7 @@ if __name__ == "__main__":
       if stage.is_alive():
         print reltime(), "Currently running", stage
 
-    time.sleep(1)
+    time.sleep(10)
 
   print '---'
   print '---'
