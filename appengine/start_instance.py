@@ -1,27 +1,9 @@
-import os
-os.environ['HOME'] = '/FAKE_HOME'
 
 import sys
-sys.path.append("third_party/backports")
+sys.path.append("third_party/backports.ssl_match_hostname-3.4.0.2/src")
 sys.path.append("third_party/libcloud")
 
-import StringIO, types
-GCE_LIBCLOUD_AUTH = StringIO.StringIO('{"access_token": "ya29.AwFYvMsPx9dGypbRq69sDhrtCoRPXNKeeSJZ6LaVyNju31lvjRKnG3adE6k5k3Rfgm9qrmGaOndieQ", "token_type": "Bearer", "expire_time": "2015-01-22T09:55:21Z", "expires_in": 3600}')
-StringIO.StringIO.__enter__ = types.MethodType(StringIO.StringIO, lambda self, *args, **kw: self)
-StringIO.StringIO.__exit__ = lambda *args, **kw: None
-real_open = open
-def fake_open(path, mode, files={}):
-  if path == "/FAKE_HOME/.gce_libcloud_auth.delta-trees-830":
-    if 'w' == mode:
-      print "################", "just opened the file"
-      return GCE_LIBCLOUD_AUTH
-    elif 'r' == mode:
-      print "################", GCE_LIBCLOUD_AUTH.getvalue()
-      return StringIO.StringIO(GCE_LIBCLOUD_AUTH.getvalue())
-    else:
-      raise IOError("AHHHH!")
-  return real_open(path, mode)
-__builtins__['open'] = fake_open
+import patch_libcloud
 
 import webapp2
 import time
