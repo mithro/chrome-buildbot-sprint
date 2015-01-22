@@ -9,6 +9,8 @@ import time
 import urllib
 import urllib2
 
+import signal
+
 METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 
 import copy
