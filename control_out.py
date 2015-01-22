@@ -365,7 +365,7 @@ def get_commits_fake():
 
 if __name__ == "__main__":
   driver = new_driver()
-  commits = get_commits_fake()
+  commits = get_commits_fake()[:2]
 
   latest_sync_snapshot = SnapshotName(commits[0], "src")
   latest_build_snapshot = SnapshotName(commits[0], "out")
