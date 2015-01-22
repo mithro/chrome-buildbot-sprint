@@ -699,9 +699,8 @@ class HandlerAsync(Handler):
     """
 
 class HandlerLongCommand(HandlerAsync):
-    NAMESPACE = "instance\\.attributes\\.long-commands\[\]"
+    NAMESPACE = r"instance\.attributes\.long-commands\[\]"
     def add(self, name, cmd, metadata=None):
-        assert name == NAMESPACE
         assert metadata is not None
         output = []
         output.append("="*80)
@@ -733,6 +732,7 @@ class HandlerLongCommand(HandlerAsync):
 
 
 class HandlerEnvironment(Handler):
+    QUIET=True
     NAMESPACE = r"(instance\.attributes\.env\..*)|(project\.attributes\.env\..*)"
 
     @staticmethod
@@ -747,16 +747,12 @@ class HandlerEnvironment(Handler):
         assert i != -1
         return name[i+5:]
 
-    def add(self, name, value):
-        os.environ[self.trim_name(name)] = value
-
-    def change(self, name, old_value, new_value):
+    def __call__(self, name, old_value, new_value, **kw):
         name = self.trim_name(name)
-        assert os.environ[name] == old_value
+        if new_value is None:
+            del os.environ[name]
+            return
         os.environ[name] = new_value
-
-    def remove(self, name, value):
-        del os.environ[self.trim_name(name)]
 
 
 class HandlerDiskBase(Handler):
@@ -834,12 +830,10 @@ class HandlerShutdown(HandlerAsync):
     NAMESPACE = r"instance\.attributes\.shutdown"
 
     def add(self, name, value, metadata):
-        assert name == NAMESPACE
         output = []
         return 0 == self.run_helper("shutdown -h +1", output), output
 
     def remove(self, name, value, metadata):
-        assert name == NAMESPACE
         output = []
         return 0 == self.run_helper("shutdown -c", output), output
 
@@ -848,7 +842,6 @@ class HandlerCommand(Handler):
     NAMESPACE = r"instance\.attributes\.commands\[\]"
 
     def add(self, name, value):
-        assert name == NAMESPACE
         output = []
         return 0 == self.run_helper(value, output), output
 
