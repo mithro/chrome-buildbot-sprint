@@ -1,2 +1,5 @@
+google_appengine/
+libcloud/
 *.pyc
-libcloud
+*.pem
+*_rsa
