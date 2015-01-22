@@ -46,13 +46,13 @@ def compare(old, new, handler, name=""):
     >>> compare(old, new, onchange)
     c: {'e': 4, 'd': 3} -> {'e': 4, 'd': 3, 'f': 5}
     c.f: None -> 5
-    >>> 
+    >>>
     >>> remove  = deepcopy(old)
     >>> del remove['c']['d']
     >>> compare(old, remove, onchange)
     c: {'e': 4, 'd': 3} -> {'e': 4}
     c.d: 3 -> None
-    >>> 
+    >>>
 
     >>> # Test lists
     >>> l = {'a': [1, 2, 3]}
@@ -242,11 +242,11 @@ class Handlers(dict):
     >>> handle_c_child = Handlers({"c\\..*":[onchange]})
     >>> handle_f = Handlers({"f":[onchange]})
     >>> old = {'a': 1, 'b': 2, 'c': {'d': 3, 'e': 4}}
-    >>> 
+    >>>
     >>> # Same dictionary does nothing
     >>> same = deepcopy(old)
     >>> compare(old, same, handle_all)
-    >>> 
+    >>>
 
     >>> # Adding new field
     >>> new  = deepcopy(old)
@@ -259,7 +259,7 @@ class Handlers(dict):
     >>> compare(old, new, handle_c_child)
     >>> compare(old, new, handle_f)
     f: None -> 5
-    >>> 
+    >>>
 
     >>> # Value changed
     >>> change  = deepcopy(old)
@@ -272,7 +272,7 @@ class Handlers(dict):
     >>> compare(old, change, handle_c)
     >>> compare(old, change, handle_c_child)
     >>> compare(old, change, handle_f)
-    >>> 
+    >>>
 
     >>> # Removing a field
     >>> remove  = deepcopy(old)
@@ -285,7 +285,7 @@ class Handlers(dict):
     >>> compare(old, remove, handle_c)
     >>> compare(old, remove, handle_c_child)
     >>> compare(old, remove, handle_f)
-    >>> 
+    >>>
 
     >>> # Nested compare adding
     >>> new  = deepcopy(old)
@@ -302,7 +302,7 @@ class Handlers(dict):
     c.f: None -> 5
     c.g: None -> 6
     >>> compare(old, new, handle_f)
-    >>> 
+    >>>
     >>> # Nested compare removal
     >>> change  = deepcopy(old)
     >>> del change['c']['d']
@@ -315,7 +315,7 @@ class Handlers(dict):
     >>> compare(old, change, handle_c_child)
     c.d: 3 -> None
     >>> compare(old, change, handle_f)
-    >>> 
+    >>>
     >>> # Nested compare removal
     >>> remove  = deepcopy(old)
     >>> del remove['c']['d']
@@ -328,7 +328,7 @@ class Handlers(dict):
     >>> compare(old, remove, handle_c_child)
     c.d: 3 -> None
     >>> compare(old, remove, handle_f)
-    >>> 
+    >>>
     """
 
     def __call__(self, name, old_value, new_value):
@@ -349,22 +349,22 @@ class MetadataHandler(object):
     """
     >>> from copy import deepcopy
     >>> def onchange(*args): print "%s: %r -> %r" % args
-    >>> 
+    >>>
     >>> old = {'a': 1, 'b': 2, 'c': {'d': 3, 'e': 4}}
     >>> m = MetadataHandler()
-    >>> 
+    >>>
     >>> # Update the values should call handler
     >>> m.add_handler("a", onchange)
     >>> m.update(old)
     a: None -> 1
-    >>> 
+    >>>
     >>> # Adding a new handler calls it if the data already exists
     >>> m.add_handler("b", onchange)
     b: None -> 2
-    >>> 
+    >>>
     >>> # Update with same values shouldn't call anything
     >>> m.update(old)
-    >>> 
+    >>>
     >>> # Updated values
     >>> m.add_handler("f", onchange)
     >>> change  = deepcopy(old)
@@ -375,7 +375,21 @@ class MetadataHandler(object):
     a: 1 -> None
     b: 2 -> 3
     f: None -> 5
-    >>> 
+    >>>
+
+
+    >>> m = MetadataHandler()
+    >>> m.update(old)
+    >>> m.get('a')
+    1
+    >>> m.get('c')
+    {'e': 4, 'd': 3}
+    >>> # Can't modify returned data
+    >>> m.get('c')['d'] = 5
+    >>> m.get('c')
+    {'e': 4, 'd': 3}
+    >>> m.get('c.d')
+    3
     """
 
     def __init__(self):
@@ -399,11 +413,31 @@ class MetadataHandler(object):
             # Add the handler
             self.handlers.add(matcher, function)
 
-    def __getitem__(self, key):
-        return self.data[key]
+    _sentinal = []
+    def get(self, key, default=_sentinal):
+        with self.lock:
+            fullkey = key
 
-    def __getattr__(self, key):
-        return self.data[key]
+            current = self.data
+            while True:
+                if key in current or '.' not in key:
+                    if key in current:
+                        return copy.deepcopy(current[key])
+                    elif default is not self._sentinal:
+                        return default
+                    else:
+                        raise KeyError("%s not found" % fullkey)
+
+                if '.' in key:
+                    p, key = key.split('.', 1)
+                    if p not in current:
+                        if default is not self._sentinal:
+                            return default
+                        else:
+                            raise KeyError("%s not found" % fullkey)
+                    current = current[p]
+
+    __getitem__ = get
 
 
 import threading
@@ -441,6 +475,9 @@ class MetadataWatcher(threading.Thread):
     def add_handler(self, matcher, function):
         self.metadata.add_handler(matcher, function)
 
+    def get(self, key):
+        self.metadata.get(key)
+
     def run(self):
         while True:
             params = dict(self.params)
@@ -475,7 +512,171 @@ class MetadataWatcher(threading.Thread):
                 raise UnexpectedStatusException(status)
 
 
-def HandlerPrinter(name, old_value, new_value):
+import socket
+import platform
+import pprint
+
+class Server(object):
+    CALLBACK_URL="project.attributes.callback"
+
+    def __init__(self, metadata_watcher):
+        self.metadata = metadata_watcher
+
+    def post_action(self, data):
+        assert self.metadata.get(self.CALLBACK_URL), """\
+Please add the callback URL for status information to the Compute Engine project with;
+# gcloud compute project-info add-metadata --metadata callback="http://example.com/callback"
+"""
+
+        extra_data = {
+            "hostname": socket.gethostname(),
+            "node": platform.node(),
+            "env": copy.deepcopy(os.environ),
+            }
+        full_data = copy.deepcopy(data)
+        full_data.update(extra_data)
+
+        # Post data here
+        pprint.pprint((
+            self.metadata[self.CALLBACK_URL],
+            full_data))
+
+
+import subprocess
+
+class Handler(object):
+    def __init__(self, server, metadata_watcher):
+        assert self.NAMESPACE, "%s must set NAMESPACE class attribute" % (self.__class__)
+        self.server = server
+        self.metadata = metadata_watcher
+        self.metadata.add_handler(self.NAMESPACE, self)
+
+    def __call__(self, name, old_value, new_value):
+        assert re.match(MATCH, name)
+        success = False
+        output = ""
+        try:
+            if old_value is None:
+                success, output = self.add(new_value)
+            elif new_value is None:
+                success, output = self.remove(old_value)
+            elif new_value != old_value:
+                success, output = self.change(old_value, new_value)
+            else:
+                assert False
+        except Exception, e:
+            success = "Exception"
+            output += str(e)
+            # Include traceback
+        finally:
+            self.server.post_action({
+                "success": success,
+                "output": output,
+                "hostname": socket.gethostname(),
+                })
+
+    @staticmethod
+    def run_helper(cmd, output):
+        output.append("="*80)
+        output.append("Running: %r" % cmd)
+        output.append("----")
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        stdout, _ = p.communicate()
+        retcode = p.wait()
+        output.append(stdout)
+        output.append("----")
+        output.append("Completed with: %s" % retcode)
+        output.append("="*80)
+        return retcode
+
+    NAMESPACE = None
+    def add(self, value):
+        pass
+
+    def remove(self, value):
+        pass
+
+    def change(self, old_value, new_value):
+        pass
+
+
+import os.path
+class HandlerMount(Handler):
+    NAMESPACE = "instance.attributes.disks$"
+
+    @staticmethod
+    def device(disk_id):
+        return "/dev/disk/by-id/google-%s" % disk_id
+
+    def assert_disk_attached(self, disk_id):
+        for attached_disk in self.metadata['instance.disks']:
+            if attached_disk['deviceName'] == disk_id:
+                break
+        else:
+            raise Exception("Disk with id %r not found on instance %r" % (
+                disk_id, self.metadata.data['instance.disks']))
+
+    def add(self, value):
+        assert 'mount-point' in value
+        assert 'disk-id' in value
+        self.assert_disk_attached(value['disk_id'])
+
+        output = []
+        success = True
+
+        # Make the mount point directory if it doesn't exist
+        if not os.path.exists(value['mount-point']):
+            os.makedirs(value['mount-point'])
+
+        # Mount the directory
+        success &= 0 == self.run_helper("""\
+mount %s %s
+""" % (self.device(value['disk-id']), value['mount-point']), output)
+
+        # Chown the directory if needed
+        if 'user' in value:
+            success &= 0 == self.run_helper("chown %s" % value['user'], output)
+
+        return success, output
+
+    def remove(self, value):
+        assert 'mount-point' in value
+        assert 'disk-id' in value
+        self.assert_disk_attached(value['disk_id'])
+
+        output = []
+        success = True
+
+        prefix = self.device(value['disk_id']) + " "
+        for line in open('/proc/mounts', 'r').readlines():
+            if line.startswith(prefix):
+                assert line.startswith(prefix+value['mount-point'])
+                success &= 0 == self.run_helper("umount %s" % value['mount-point'])
+
+        return success, output
+
+
+class HandlerShutdown(Handler):
+    NAMESPACE = "instance.attributes.shutdown"
+
+    def add(self, value):
+        assert value == 1
+        output = []
+        return 0 == self.run_helper("shutdown -h +1", output), output
+
+    def remove(self, value):
+        return 0 == self.run_helper("shutdown -c", output), output
+
+
+class HandlerCommand(Handler):
+    NAMESPACE = "instance.attributes.commands[]"
+
+    def add(self, value):
+        output = []
+        return 0 == self.run_helper(value, output), output
+
+
+def Printer(name, old_value, new_value):
     if isinstance(old_value, (dict, list)) or isinstance(new_value, (dict, list)):
         return
 
@@ -496,6 +697,15 @@ if __name__ == "__main__":
     doctest.testmod()
 
     watcher = MetadataWatcher()
-    watcher.add_handler(".*", HandlerPrinter)
+    server = Server(watcher)
+    HandlerMount(server, watcher)
+    HandlerCommand(server, watcher)
+    HandlerShutdown(server, watcher)
+
+    watcher.add_handler(".*", Printer)
     watcher.start()
     watcher.join()
+
+
+
+
