@@ -457,9 +457,9 @@ if __name__ == "__main__":
   latest_commit_id = '863dc8b59882bf44'
   test_commit_ids = [
     '3efbc4188cd3d2dc',
-    # '2cc83022ff33e4b3',
-    # 'd22f93d643e8717f',
-    # '90cf1c6008252b6c',
+    '2cc83022ff33e4b3',
+    'd22f93d643e8717f',
+    '90cf1c6008252b6c',
   ]
   latest_sync_snapshot = SnapshotName(latest_commit_id, "src")
   latest_build_snapshot = SnapshotName(latest_commit_id, "out")
@@ -473,7 +473,7 @@ if __name__ == "__main__":
   stages = []
   for c in test_commit_ids:
     stages.append(SyncStage(c, sync_from=latest_sync_snapshot))
-    # stages.append(BuildStage(c, build_from=latest_build_snapshot))
+    stages.append(BuildStage(c, build_from=latest_build_snapshot))
     latest_sync_snapshot = SnapshotName(c, "src")
 
   print "---"
