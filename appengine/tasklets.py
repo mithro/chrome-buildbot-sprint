@@ -77,28 +77,53 @@ class CreateInstance(Tasklet):
     self.instance.create(driver)
 
 
-class AttachDisksToInstance(Tasklet):
-  def __init__(self, task_id, instance, disks):
+class AttachDiskToInstance(Tasklet):
+  def __init__(self, task_id, instance, disk):
     Tasklet.__init__(self, task_id)
     self.instance = instance
-    self.disks = disks
+    self.disk = disk
 
   def is_startable(self, driver):
-    return max([self.instance.ready(driver)]+[d.ready(driver) for d in self.disks])
+    if not self.instance.exists(driver):
+      return False
 
-  def is_running(self, driver):
-    return inf
+    if not self.disk.exists(driver):
+      return False
 
-  def is_done(self, driver):
-    for disk in self.disks:
-      if not self.instance.attached(disk):
-        return False
     return True
 
-  def run(self, driver):
-    for disk in self.disks:
-      self.instance.attach(disk)
+  def is_running(self, driver):
+    return True
 
+  def is_done(self, driver):
+    return self.instance.attached(driver, self.disk)
+
+  def run(self, driver):
+    assert self.instance.exists(driver)
+    assert self.disk.exists(driver)
+    self.instance.attach(driver, disk)
+
+
+class DetachDiskFromInstance(AttachDisksToInstance):
+  def is_startable(self, driver):
+    if not self.instance.exists(driver):
+      return False
+
+    if not self.disks.exists(driver):
+      return False
+
+    return True
+
+  def is_running(self, driver):
+    return True
+
+  def is_done(self, driver):
+    return not self.instance.attached(driver, self.disk)
+
+  def run(self, driver):
+    self.instance.detach(driver, disk)
+
+      
 
 class MetadataTasklet(Tasklet):
   METADATA_KEY=None
@@ -177,18 +202,25 @@ class RunCommandOnInstance(MetadataTasklet):
     return self.mount_task.is_done(driver)
 
 
+class WaitOnOtherTasks(Tasklet):
+  def __init__(self, task_id, task_to_run, tasks_to_wait_for):
+    Tasklet.__init__(self, task_id):
+    self.task_to_run = task_to_run
+    self.tasks_to_wait_for = tasks_to_wait_for
 
-class SyncStage(object):
+  def is_startable(self, driver):
+    if not self.task_to_run.is_startable(driver):
+      return False
 
-  def tasklets(self):
-    name = '-'.join([NoDash(getpass.getuser()), NoDash(commit), NoDash(BUILD_PLATFORM), self.__class__.__name__])
+    for task in self.tasks_to_wait_for:
+      if not task.is_done(driver):
+        return False
 
-    return [
-      CreateInstance("%s-%s" % (name, instance)),
-      CreateDisksFromSnapshots(
+    return True
 
-
-
+  # Map everything else onto the task which should run
+  def __getattr__(self, key):
+    return getattr(self, self.task_to_run, key)
 
 
 

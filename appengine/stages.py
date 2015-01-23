@@ -9,19 +9,88 @@ class SyncStage(object):
 
   def tasklets(self):
     #prev = '-'.
-    name = '-'.join([NoDash(getpass.getuser()), NoDash(commit), NoDash(BUILD_PLATFORM), self.__class__.__name__])
+    task_id = '-'.join([NoDash(getpass.getuser()), NoDash(commit), NoDash(BUILD_PLATFORM), self.__class__.__name__])
 
-    previous_src = Snapshot(previous_src)
+    previous_snap_src = Snapshot("%s-snapshot-src" % task_id)
 
-    out_src = Disk(
-    return [
-      CreateInstance(name, "%s-instance" % name),
-      CreateDiskFromSnapshot( previous_src, out_src),
-      AttachDisksToInstances( 
+    instance = Instance("%s-instance" % task_id)
+    disk_src = Disk("%s-disk-src" % task_id)
+    snap_src = Snapshot("%s-snapshot-src" % task_id)
+
+    tasks = []
+    tasks.append(CreateInstance(task_id, instance, required_snapshots=[previous_snap_src]))
+    tasks.append(CreateDiskFromSnapshot(task_id, previous_snap_src, disk_src))
+    tasks.append(AttachDiskToInstances(task_id, instance, disk_src))
+    tasks.append(MountDisksInInstance(task_id, instance, [(disk_src, "/mnt")]))
+
+    run_task = RunCommandOnInstance(task_id, instance, """\
+export PATH=$PATH:/mnt/chromium/depot_tools;
+cd /mnt/chromium/src;
+time gclient sync -r %s
+""")
+    tasks.append(run_task)
+
+    umount_task = UmountDisksInInstance(task_id, instance, src_disk)
+    tasks.append(WaitOnOtherTasks(task_id, umount_task, [run_task]))
+
+    detach_task = DetachDisksFromInstance(task_id, instance, disk)
+    tasks.append(detach_task)
+
+    snapshot_task = CreateSnapshotFromDisk(task_id, disk_src, snap_src)
+    tasks.append(WaitOnOtherTasks(task_id, snapshot_task, [detatch_task]))
+
+    return tasks
 
 
+class BuildStage(object):
+  def tasklets(self):
+    task_id = '-'.join([NoDash(getpass.getuser()), NoDash(commit), NoDash(BUILD_PLATFORM), self.__class__.__name__])
+
+    current_snap_src = Snapshot("%s-snapshot-src" % task_id)
+    previous_snap_out = Snapshot("%s-snapshot-out" % task_id)
+
+    instance = Instance("%s-instance" % task_id)
+    disk_src = Disk("%s-disk-src" % task_id)
+    disk_out = Disk("%s-disk-out" % task_id)
+    snap_out = Snapshot("%s-snapshot-out" % task_id)
+
+    tasks = []
+    tasks.append(CreateInstance(task_id, instance, required_snapshots=[previous_snap_src]))
+    tasks.append(CreateDiskFromSnapshot(task_id, current_snap_src, disk_src))
+    tasks.append(CreateDiskFromSnapshot(task_id, previous_snap_out, disk_out))
+    tasks.append(AttachDiskToInstances(task_id, instance, disk_src))
+    tasks.append(AttachDiskToInstances(task_id, instance, disk_out))
+    tasks.append(MountDisksInInstance(task_id, instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]))
+
+    run_task = RunCommandOnInstance(task_id, instance, """\
+export PATH=$PATH:/mnt/chromium/depot_tools;
+cd /mnt/chromium/src;
+time build/gyp_chromium;
+time ninja -C out/Debug;
+""")
+    tasks.append(run_task)
+
+    umount_task = UnountDisksInInstance(task_id, instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")])
+    tasks.append(WaitOnOtherTasks(task_id, umount_task, [run_task]))
+
+    detach_src_task = DetachDiskFromInstances(task_id, instance, disk_src)
+    detach_out_task = DetachDiskFromInstances(task_id, instance, disk_out)
+    tasks.append(WaitOnOtherTasks(task_id, detach_src_task, [umount_task]))
+    tasks.append(WaitOnOtherTasks(task_id, detach_out_Task, [umount_task]))
+
+    snapshot_out_task = CreateSnapshotFromDisk(task_id, disk_out, snap_out)
+    tasks.append(WaitOnOtherTasks(task_id, snapshot_task, [detach_out_task]))
+
+    return task
 
 
+if __name__ == "__main__":
+  previous_commit = "commit0"
+  current_commit = "commit1"
+  
+
+  print SyncStage(previous_commit, current_commit).tasklists()
+  print BuildStage(previous_commit, current_commit).tasklists()
 
 
 # Tasks
