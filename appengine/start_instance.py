@@ -1,4 +1,3 @@
-
 import libcloud_gae
 import webapp2
 import time
@@ -16,5 +15,5 @@ class StartInstanceHandler(webapp2.RequestHandler):
 
 
 APP = webapp2.WSGIApplication([
-  ('/start-instance/?', StartInstanceHandler),
+  ('/start_instance/?', StartInstanceHandler),
 ], debug=True)
