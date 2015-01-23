@@ -272,10 +272,9 @@ class Instance(GCEObject):
       volume=disk._gce_obj_get(driver, self.name),
       ex_node=self._gce_obj_get(driver, disk.name))
 
-  def set_metadata(self, driver, data=None, **kw):
+  def set_metadata(self, driver, data={}, **kw):
     metadata = copy.deepcopy(self.metadata)
-    if data:
-      metadata.update(kw)
+    metadata.update(data)
     metadata.update(kw)
     for key in metadata.keys():
       v = metadata[key]

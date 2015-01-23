@@ -173,12 +173,13 @@ class MetadataTasklet(Tasklet):
       if data not in metadata[self.METADATA_KEY]:
         metadata[self.METADATA_KEY].append(data)
 
-    self.instance.set_metadata(driver, mount=metadata[self.METADATA_KEY])
+    self.instance.set_metadata(driver, {self.METADATA_KEY: metadata[self.METADATA_KEY]})
     
 
 
 class MountDisksInInstance(MetadataTasklet):
   METADATA_KEY='mount'
+  METADATA_SUCCESS_FLAG = '%s-%s-%s'
 
   def __init__(self, tid, instance, disks_and_mnts):
     MetadataTasklet.__init__(self, tid, instance)
@@ -192,6 +193,7 @@ class MountDisksInInstance(MetadataTasklet):
         'mount-point': mnt,
         'disk-id': disk.name,
         'user': 'ubuntu',
+        'success-flag': METADATA_SUCCESS_FLAG % (self.tid, disk, mnt)
       })
     return data
 
@@ -202,7 +204,12 @@ class MountDisksInInstance(MetadataTasklet):
     return True
 
   def is_finished(self):
-    return self.instance.fetch("mount") is not None
+    if 'flags' not in self.instance.metadata:
+      return False
+    for disk, mnt in self.disks_and_mnts:
+      if self.METADATA_SUCCESS_FLAG % (self.tid, disk, mnt) not in self.instance.metadata['flags']:
+        return False
+    return True
 
 
 class UnmountDisksInInstance(MountDisksInInstance):

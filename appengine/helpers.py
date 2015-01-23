@@ -21,3 +21,21 @@ def parse_time(timestamp_str):
   dt = dateutil.parser.parse(timestamp_str)
   return calendar.timegm(dt.utctimetuple())+1e-6*dt.microsecond
 
+def special_update(current, key, value):
+  """
+  >>> a = {}
+  >>> special_update(a, 'b.c', 1)
+  >>> a
+  {'b': {'c': 1}}
+  >>>
+  """
+  while '.' in key:
+      p, key = key.split('.', 1)
+      if p not in current:
+        current[p] = {}
+      current = current[p]
+  current[key] = value
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
