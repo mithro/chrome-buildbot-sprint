@@ -55,7 +55,7 @@ class ScheduleHandler(webapp2.RequestHandler):
     start = time.time()
 
     # Cron schedules us once per minute, so issue 6 tasks to get one per 10s.
-    for c in xrange(6):
+    for c in xrange(0, 60, 10):
         taskqueue.add(url='/poll_gce/do',
                       method='GET',
                       countdown=c)
