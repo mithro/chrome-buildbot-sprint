@@ -584,10 +584,15 @@ Current project metadata:
         # Post data here
         print "=+"*30
         print "Posting data"
+        print "A"
         output = full_data["output"]
+        print "B"
         del full_data["output"]
+        print "C"
         import urllib2
+        print "D"
         url = self.metadata[self.CALLBACK_URL]
+        print "E"
         print 'Post response from %s: %s' % (url, urllib2.urlopen(url, data=full_data))
         pprint.pprint((
             self.metadata[self.CALLBACK_URL],
