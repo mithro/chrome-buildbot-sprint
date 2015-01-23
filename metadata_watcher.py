@@ -590,6 +590,7 @@ Current project metadata:
         try:
             for v in full_data.values():
                 simplejson.dumps(v)
+            print 'JSONIZING %r' % full_data
             print 'Post response from %s: %s' % (url, urllib2.urlopen(url, data=urllib.urlencode({'data': simplejson.dumps(full_data)})).read())
         except Exception as e:
             print 'ERROR:', e
