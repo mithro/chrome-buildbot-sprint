@@ -574,28 +574,16 @@ Current project metadata:
 """ % (pprint.pformat(self.metadata.get("project", None)))
 
         url = self.metadata[self.CALLBACK_URL]
-        extra_data = {
-            "hostname": socket.gethostname(),
-            "node": platform.node(),
-            "env": dict(os.environ),
-        }
-        full_data = copy.deepcopy(data)
-        output = full_data["output"]
-        del full_data["output"]
-        full_data.update(extra_data)
-
-        print "=+"*30
-        print "Posting data to %s:" % url
+        data = copy.deepcopy(data)
+        data["instance-name"] = socket.gethostname()
+        print "Posting data to callback URL %s:" % url
         pprint.pprint(full_data)
         try:
             encoded_data = urllib.urlencode({'data': simplejson.dumps(full_data)})
             response = urllib2.urlopen(url, data=encoded_data).read()
-            print 'Post response from %s: %s' % (url, response)
+            print 'Callback response: %s' % response
         except Exception as e:
             print 'Callback error:', e
-        print "-"*80
-        print output
-        print "=+"*30
 
 
 class Handler(object):
@@ -608,22 +596,18 @@ class Handler(object):
     def __call__(self, name, old_value, new_value, **kw):
         success = False
         output = []
-        func = None
         try:
             if old_value is None:
                 if not hasattr(self, 'add'):
                     return
-                func = self.add
                 success, output = self.add(name, new_value, **kw)
             elif new_value is None:
                 if not hasattr(self, 'remove'):
                     return
-                func = self.remove
                 success, output = self.remove(name, old_value, **kw)
             elif new_value != old_value:
                 if hasattr(self, 'change'):
                     return
-                func = self.change
                 success, output = self.change(name, old_value, new_value, **kw)
             else:
                 assert False
@@ -635,14 +619,20 @@ class Handler(object):
             tb.seek(0)
             output.append(tb.getvalue())
         finally:
+            print "-"*80
+            print "\n".join(output)
+            print "=+"*30
             data = {
                 "type": "finished",
-                "function": "%r" % func,
                 "success": success,
-                "output": "\n".join(output),
-                }
-            if new_value and 'output-file' in new_value:
-                open(new_value['output-file'], 'w').write(simplejson.dumps(data))
+            }
+            if new_value:
+                if 'output-file' in new_value:
+                    open(new_value['output-file'], 'w').write(simplejson.dumps(data) + '\n' + output)
+                if success and 'success-flag' in new_value:
+                    data['set-flag'] = new_value['success-flag']
+                if not success and 'failure-flag' in new_value:
+                    data['set-flag'] = new_value['failure-flag']
             self.post(data)
 
     def post(self, data):
