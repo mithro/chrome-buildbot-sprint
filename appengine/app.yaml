@@ -12,11 +12,14 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
-- url: /start-instance/?
+- url: /start_instance/?
   script: start_instance.APP
 
 - url: /poll_gce/.*
   script: poll_gce.APP
+
+- url: /callback(/.*)?
+  script: callback.APP
 
 - url: /.*
   script: printenv.APP
