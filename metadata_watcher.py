@@ -590,7 +590,7 @@ Current project metadata:
         try:
             print 'Post response from %s: %s' % (url, urllib2.urlopen(url, data=urllib.urlencode({'data': simplejson.dumps(full_data)})).read())
         except Exception as e:
-            print e
+            print 'ERROR:', e
         pprint.pprint((url, full_data))
         print "-"*80
         print output
