@@ -2,6 +2,7 @@
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
 
+from objects import Instance
 from objects import Disk
 from objects import Snapshot
 import libcloud_gae
@@ -43,7 +44,7 @@ def generate_summary(instance_names=[], disk_names=[], snapshot_names=[]):
   if not snapshot_names:
     snapshot_names = []
   return PAGE_SUMMARY_TEMPLATE.format(
-    '<br>\n'.join(instance_names),
+    '<br>\n'.join([PAGE_LINK_TEMPLATE.format('instance', i, i) for i in instance_names]),
     '<br>\n'.join([PAGE_LINK_TEMPLATE.format('disk', i, i) for i in disk_names]),
     '<br>\n'.join([PAGE_LINK_TEMPLATE.format('snapshot', i, i) for i in snapshot_names]),
   )
@@ -84,6 +85,9 @@ class PollGceHandler(webapp2.RequestHandler):
     memcache.set_multi({"gce_instances": instance_names,
                         "gce_disks": disk_names,
                         "gce_snapshots": snapshot_names })
+
+    for node in nodes:
+        Instance(node.name).update_from_gce(node)
 
     for volume in volumes:
         Disk(volume.name).update_from_gce(volume)
