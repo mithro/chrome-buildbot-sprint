@@ -576,7 +576,7 @@ Current project metadata:
         extra_data = {
             "hostname": socket.gethostname(),
             "node": platform.node(),
-            "env": copy.deepcopy(os.environ),
+            "env": dict(os.environ),
             }
         full_data = copy.deepcopy(data)
         full_data.update(extra_data)
