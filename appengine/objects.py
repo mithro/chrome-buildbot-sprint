@@ -3,13 +3,11 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
-import sys
-sys.path.append("third_party/python-dateutil-1.5")
-
-import calendar
-import dateutil.parser
 import time
+
 from google.appengine.api import memcache
+
+from helpers import *
 from libcloud_gae import ResourceNotFoundError
 
 
