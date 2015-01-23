@@ -573,28 +573,26 @@ Current project metadata:
 %s
 """ % (pprint.pformat(self.metadata.get("project", None)))
 
+        url = self.metadata[self.CALLBACK_URL]
         extra_data = {
             "hostname": socket.gethostname(),
             "node": platform.node(),
             "env": dict(os.environ),
-            }
+        }
         full_data = copy.deepcopy(data)
-        full_data.update(extra_data)
-
-        # Post data here
-        print "=+"*30
-        url = self.metadata[self.CALLBACK_URL]
-        print "Posting data to %s" % url
         output = full_data["output"]
         del full_data["output"]
+        full_data.update(extra_data)
+
+        print "=+"*30
+        print "Posting data to %s:" % url
+        pprint.pprint(full_data)
         try:
-            for k, v in full_data.items():
-                print 'JSONIZING %s, %r' % (k, v)
-                simplejson.dumps(v)
-            print 'Post response from %s: %s' % (url, urllib2.urlopen(url, data=urllib.urlencode({'data': simplejson.dumps(full_data)})).read())
+            encoded_data = urllib.urlencode({'data': simplejson.dumps(full_data)})
+            response = urllib2.urlopen(url, data=encoded_data).read()
+            print 'Post response from %s: %s' % (url, response)
         except Exception as e:
-            print 'ERROR:', e
-        pprint.pprint((url, full_data))
+            print 'Callback error:', e
         print "-"*80
         print output
         print "=+"*30
