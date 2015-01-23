@@ -28,17 +28,17 @@ class GCEObject(object):
 
   def exists(self, driver):
     try:
-      return parseTime(self._create_time(driver))
+      return True
     except ResourceNotFoundError:
-      return inf
+      return False
 
   def ready(self, driver):
     try:
       if self._status(driver) != "READY":
-        return inf
-      return TimerLog.log(self, "READY")
+        return False
+      return True
     except ResourceNotFoundError:
-      return inf
+      return False
 
   def destroy(self, driver):
     assert self.exists(driver)
@@ -54,7 +54,6 @@ class Disk(GCEObject):
 
   def _gce_destory_func(self, driver):
     return driver.destroy_volume
-    return driver.destroy_volume_snapshot
 
   def create(self, driver, from_snapshot):
     TimerLog.log(self, "CREATE")
@@ -123,13 +122,13 @@ class Instance(GCEObject):
       return None
 
   def ready(self, driver):
-    if GCEObject.ready(driver) == inf:
-      return inf
+    if not GCEObject.ready(driver):
+      return False
 
     if not self.fetch(driver):
-      return inf
+      return False
 
-    return TimeLog.log(self, "READY")
+    return True
 
   def attach(self, driver, disk, mode):
     assert self.exists()
