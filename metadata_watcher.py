@@ -625,14 +625,10 @@ class Handler(object):
             data = {
                 "type": "finished",
                 "success": success,
+                "old-value": old_value,
+                "new-value": new_value,
+                "output": output,
             }
-            if new_value:
-                if 'output-file' in new_value:
-                    open(new_value['output-file'], 'w').write(simplejson.dumps(data) + '\n' + output)
-                if success and 'success-flag' in new_value:
-                    data['set-flag'] = new_value['success-flag']
-                if not success and 'failure-flag' in new_value:
-                    data['set-flag'] = new_value['failure-flag']
             self.post(data)
 
     def post(self, data):

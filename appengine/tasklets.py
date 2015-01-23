@@ -160,7 +160,27 @@ class MetadataTasklet(Tasklet):
     metadata = self.instance.metadata
     if self.METADATA_RESULT not in metadata:
       return False
+
+    for data in self._metadata_values():
+      if data not in metadata[self.METADATA_RESULT]:
+        return False
+
     return True
+
+  @classmethod
+  def handle_callback(cls, instance, success, old_value, new_value):
+    assert old_value is None
+    if not success:
+      return
+
+    metadata = instance.metadata
+    if cls.METADATA_RESULT not in metadata:
+      metadata[cls.METADATA_RESULT] = []
+
+    if new_value not in metadata[cls.METADATA_RESULT]:
+      metadata[cls.METADATA_RESULT].append(new_value)
+
+    instance.set_metadata(driver, {cls.METADATA_RESULT: metadata[cls.METADATA_RESULT]})
 
   # ----------------------------------------
 
@@ -179,7 +199,8 @@ class MetadataTasklet(Tasklet):
 
 class MountDisksInInstance(MetadataTasklet):
   METADATA_KEY='mount'
-  METADATA_SUCCESS_FLAG = '%s-%s-%s'
+  METADATA_RESULT='mount-result'
+  HANDLER='HandlerMount'
 
   def __init__(self, tid, instance, disks_and_mnts):
     MetadataTasklet.__init__(self, tid, instance)
@@ -193,7 +214,7 @@ class MountDisksInInstance(MetadataTasklet):
         'mount-point': mnt,
         'disk-id': disk.name,
         'user': 'ubuntu',
-        'success-flag': METADATA_SUCCESS_FLAG % (self.tid, disk, mnt)
+        'tid': self.tid,
       })
     return data
 
@@ -203,22 +224,18 @@ class MountDisksInInstance(MetadataTasklet):
         return False
     return True
 
-  def is_finished(self):
-    if 'flags' not in self.instance.metadata:
-      return False
-    for disk, mnt in self.disks_and_mnts:
-      if self.METADATA_SUCCESS_FLAG % (self.tid, disk, mnt) not in self.instance.metadata['flags']:
-        return False
-    return True
-
 
 class UnmountDisksInInstance(MountDisksInInstance):
   METADATA_KEY='umount'
+  METADATA_RESULT='umount-result'
+  HANDLER='HandlerUnmount'
 
 
 
 class RunCommandOnInstance(MetadataTasklet):
   METADATA_KEY='long-commands'
+  METADATA_RESULT='long-commands-result'
+  HANDLER='HandlerLongCommand'
 
   def __init__(self, tid, instance, command):
     MetadataTasklet.__init__(self, tid, instance)

@@ -35,7 +35,7 @@ class SyncStage(Stage):
     tasks.append(CreateDiskFromSnapshot(sid+"-disk-src-create", previous_snap_src, disk_src))
     tasks.append(AttachDiskToInstance(sid+"-disk-src-attach", instance, disk_src, 'READ_WRITE'))
 
-    mount_task = MountDisksInInstance(sid+"-disk-mount", instance, [(disk_src, "/mnt")])
+    mount_task = MountDisksInInstance(sid+"-disk-mount", instance, [(disk_src, "/mnt/chromium")])
     tasks.append(mount_task)
 
     run_task = RunCommandOnInstance(sid+"-run", instance, """\
@@ -87,17 +87,25 @@ time ninja -C out/Debug;
 """)
     tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
 
-    umount_task = UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")])
-    tasks.append(WaitOnOtherTasks(umount_task, [run_task]))
+    umount_task = WaitOnOtherTasks(
+      UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]),
+      [run_task])
+    tasks.append(unmount_task)
 
-    detach_src_task = DetachDiskFromInstance(sid+"-disk-src-detach", instance, disk_src)
-    tasks.append(WaitOnOtherTasks(detach_src_task, [umount_task]))
+    detach_src_task = WaitOnOtherTasks(
+      DetachDiskFromInstance(sid+"-disk-src-detach", instance, disk_src),
+      [umount_task])
+    tasks.append(detach_src_task)
 
-    detach_out_task = DetachDiskFromInstance(sid+"-disk-out-detach", instance, disk_out)
-    tasks.append(WaitOnOtherTasks(detach_out_task, [umount_task]))
+    detach_out_task = WaitOnOtherTasks(
+      DetachDiskFromInstance(sid+"-disk-out-detach", instance, disk_out),
+      [umount_task])
+    tasks.append(detach_out_task)
 
-    snapshot_out_task = CreateSnapshotFromDisk(sid+"-disk-out-snapshot", disk_out, snap_out)
-    tasks.append(WaitOnOtherTasks(snapshot_out_task, [detach_out_task]))
+    snapshot_out_task = WaitOnOtherTasks(
+      CreateSnapshotFromDisk(sid+"-disk-out-snapshot", disk_out, snap_out),
+      [detach_out_task])
+    tasks.append(snapshot_out_task)
 
     return tasks
 
@@ -116,7 +124,7 @@ if __name__ == "__main__":
     go = True
 
     def skip(self, obj):
-      return not obj.name.startswith(NoDash(getpass.getuser()))
+      return not obj.name.startswith(NoDash(getpass.getuser()) + '-commit')
 
     def run(self):
       driver = libcloud_gae.new_driver()
@@ -165,19 +173,24 @@ if __name__ == "__main__":
       print "-->", ('startable', t.task_to_run.is_startable()), ('running', t.task_to_run.is_running()), ('done', t.task_to_run.is_finished())
     print
 
-  """
-  print "-"*80
-  print
-  print "BuildStage"
-  print "-"*80
-  for t in BuildStage(previous_commit, current_commit).tasklets():
-    print t
-    print ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished())
-    print
-  print "-"*80
-  """
 
   try:
+    updater.output = False
+    raw_input("okay?")
+    updater.output = True
+
+    """
+    print "-"*80
+    print
+    print "BuildStage"
+    print "-"*80
+    for t in BuildStage(previous_commit, current_commit).tasklets():
+      print t
+      print ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished())
+      print
+    print "-"*80
+    """
+
     while updater.is_alive():
       for t in SyncStage(previous_commit, current_commit).tasklets():
         print time.time(), t.tid, ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished()),
