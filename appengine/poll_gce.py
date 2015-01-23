@@ -2,8 +2,8 @@
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
 
-from entities import Disk
-from entities import Snapshot
+from objects import Disk
+from objects import Snapshot
 import libcloud_gae
 import webapp2
 import time
@@ -86,10 +86,10 @@ class PollGceHandler(webapp2.RequestHandler):
                         "gce_snapshots": snapshot_names })
 
     for volume in volumes:
-        Disk.from_gce(volume)
+        Disk(volume.name).update_from_gce(volume)
 
     for snapshot in snapshots:
-        Snapshot.from_gce(snapshot)
+        Snapshot(snapshot.name).update_from_gce(snapshot)
 
     result = PAGE_TEMPLATE.format(
         'poll_gce/do',
