@@ -8,8 +8,6 @@ import getpass
 from tasklets import *
 from helpers import *
 
-SID_DASH_COUNT = 4
-
 
 class Stage(object):
   @property
@@ -20,7 +18,6 @@ class Stage(object):
       "linux",
       self.__class__.__name__.lower().replace('stage', ''),
     ])
-    assert sid.count('-') == SID_DASH_COUNT
     return sid
 
   def __init__(self, previous_commit, current_commit):
