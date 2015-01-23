@@ -5,7 +5,10 @@
 
 import copy
 import time
-import simplejson
+try:
+  import simplejson
+except:
+  import json as simplejson
 import urllib2
 
 try:
