@@ -587,7 +587,10 @@ Current project metadata:
         print "Posting data to %s" % url
         output = full_data["output"]
         del full_data["output"]
-        print 'Post response from %s: %s' % (url, urllib2.urlopen(url, data=full_data).read())
+        try:
+            print 'Post response from %s: %s' % (url, urllib2.urlopen(url, data=full_data).read())
+        except Exception as e:
+            print e
         pprint.pprint((url, full_data))
         print "-"*80
         print output
