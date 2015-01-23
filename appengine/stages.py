@@ -124,12 +124,29 @@ class Timelog(object):
 
 
 class Disk(object):
-  def __init__(self, name):
-    self.name = name
 
-  def create(self, driver, from_snapshot):
-    TimerLog.log(self, "CREATE")
-    driver.create_volume(size=None, name=self.name, snapshot=from_snapshot, ex_disk_type='pd-ssd')
+  @staticmethod
+  def load_state_from_gce(gce_volume):
+    d = Disk(
+      name = gce_volume.name,
+      create_time = parseTime(gce_volume.extra['creationTimestamp']),
+      )
+    return d
+
+  @staticmethod
+  def load_state_from_cache(self, serial_data):
+    return Disk(**serial_data)
+
+  @staticmethod
+  def load(self, driver, key):
+    if not cache.has_data(key):
+      cache.save(Disk.load_state_from_gce(driver.get_volume(key))
+    return Disk.load_state_from_cache(cache[key])
+    
+
+  def __init__(self, name, create_time = None):
+    self.create_time = None
+    self.name = name
 
   def exists(self, driver):
     try:
@@ -148,11 +165,36 @@ class Disk(object):
     except ResourceNotFoundError:
       return inf
 
+  def create(self, driver, from_snapshot):
+    TimerLog.log(self, "CREATE")
+    self.update(Disk.load_state_from_gce(
+      driver.create_volume(size=None, name=self.name, snapshot=from_snapshot, ex_disk_type='pd-ssd')))
+
   def destroy(self, driver):
     assert self.exists(driver)
     assert self.ready(driver)
     TimerLog.log(self, "DESTROY")
     driver.destroy_volume(self.driver.ex_get_volume(self.name))
+
+
+def poll():
+  disks = []
+  for volume in gce.get_volumes():
+    disks.append(Disk.load_state_from_gce(volume))
+  save_to_cache(disks)
+
+
+def main():
+  blah = Disk.load("empty-disk")
+  if not blah.exists():
+    blah.create(blasdfh_xxxx)
+
+  do_others()
+
+  if blah.exists():
+    blah.destroy()
+
+
 
 
 class Snapshot(object):
