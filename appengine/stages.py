@@ -51,7 +51,6 @@ SERVICE_ACCOUNT_EMAIL = '621016184110-tpkj4skaep6c8ccgolhoheepffasa9kq@developer
 SERVICE_ACCOUNT_KEY_PATH = 'keys/chrome-buildbot-sprint-c514ee5826d1.pem'
 SCOPES = ['https://www.googleapis.com/auth/compute']
 
-STARTUP_SCRIPT = 'metadata_watcher.py'
 
 ComputeEngine = get_driver(Provider.GCE)
 def new_driver():
@@ -84,28 +83,6 @@ def SnapshotName(commit, content):
 
 
 
-def get_gce_state(): pass
-
-class Tasklet(object):
-  def __init__(self, task_id):
-    self.task_id = task_id
-
-  @property
-  def lock(self):
-    pass
-
-  def ready(self):
-    raise NotImplementedError()
-
-  def run(self):
-    raise NotImplementedError()
-
-  def running(self):
-    raise NotImplementedError()
-
-  def done(self):
-    raise NotImplementedError()
-
 
 inf = float("inf")
 
@@ -122,115 +99,230 @@ class Timelog(object):
     return self[id][key]
 
 
-
-class Disk(object):
-
-  @staticmethod
-  def load_state_from_gce(gce_volume):
-    d = Disk(
-      name = gce_volume.name,
-      create_time = parseTime(gce_volume.extra['creationTimestamp']),
-      )
-    return d
-
-  @staticmethod
-  def load_state_from_cache(self, serial_data):
-    return Disk(**serial_data)
-
-  @staticmethod
-  def load(self, driver, key):
-    if not cache.has_data(key):
-      cache.save(Disk.load_state_from_gce(driver.get_volume(key))
-    return Disk.load_state_from_cache(cache[key])
-    
-
-  def __init__(self, name, create_time = None):
-    self.create_time = None
+class GCEObject(object):
+  def __init__(self, name):
     self.name = name
+
+  def _gce_obj(self, driver):
+    raise NotImplementedError()
+
+  def _gce_destroy_func(self, driver):
+    raise NotImplementedError()
+
+  def _status(self, driver):
+    try:
+      self._gce_obj(driver).status['status']
+    except ResourceNotFoundError:
+      return "IMAGINARY"
+
+  def _create_time(self, driver):
+    self._gce_obj(driver).extra['creationTimestamp'])
+
+  def __eq__(self, other):
+    return type(self) == type(other) and self.name == other.name
 
   def exists(self, driver):
     try:
-      return parseTime(
-        driver.ex_get_volume(self.dst).extra['creationTimestamp'])
+      return parseTime(self._create_time(driver))
     except ResourceNotFoundError:
       return inf
 
   def ready(self, driver):
     try:
-      dst_volume = driver.ex_get_volume(self.name)
-      if dst_volume.extra['status'] != "READY":
+      if self._status(driver) != "READY":
         return inf
-      
       return TimerLog.log(self, "READY")
     except ResourceNotFoundError:
       return inf
-
-  def create(self, driver, from_snapshot):
-    TimerLog.log(self, "CREATE")
-    self.update(Disk.load_state_from_gce(
-      driver.create_volume(size=None, name=self.name, snapshot=from_snapshot, ex_disk_type='pd-ssd')))
 
   def destroy(self, driver):
     assert self.exists(driver)
     assert self.ready(driver)
     TimerLog.log(self, "DESTROY")
-    driver.destroy_volume(self.driver.ex_get_volume(self.name))
+    self._gce_destory_func(driver)(self._gce_obj(driver))
 
 
-def poll():
-  disks = []
-  for volume in gce.get_volumes():
-    disks.append(Disk.load_state_from_gce(volume))
-  save_to_cache(disks)
 
+class Disk(GCEObject):
+  def _gce_obj(self, driver):
+    return driver.ex_get_volume(self.name)
 
-def main():
-  blah = Disk.load("empty-disk")
-  if not blah.exists():
-    blah.create(blasdfh_xxxx)
+  def _gce_destory_func(self, driver):
+    return driver.destroy_volume
+    return driver.destroy_volume_snapshot
 
-  do_others()
-
-  if blah.exists():
-    blah.destroy()
+  def create(self, driver, from_snapshot):
+    TimerLog.log(self, "CREATE")
+    driver.create_volume(size=None, name=self.name, snapshot=from_snapshot, ex_disk_type='pd-ssd')
 
 
 
 
-class Snapshot(object):
-  def __init__(self, name):
-    self.name = name
+class Snapshot(GCEObject):
+  def _gce_obj(self, driver):
+    return driver.ex_get_snapshot(self.name)
+
+  def _gce_destory_func(self, driver):
+    return driver.destroy_volume_snapshot
+
+  # For some reason snapshot status is only available via .status rather than
+  # .extra['status']!?
+  def _status(self, driver):
+    try:
+      return self._gce_obj(driver).status
+    except ResourceNotFoundError:
+      return "IMAGINARY"
 
   def create(self, driver, from_disk):
     TimeLog.log(self, "CREATE")
-    volume = driver.ex_get_volume(from_disk)
-    driver.create_volume_snapshot(volume, self.name)
+    driver.create_volume_snapshot(driver.ex_get_volume(from_disk), self.name)
 
-  def exists(self, driver):
+
+
+class Instance(GCEObject):
+  def _gce_obj(self, driver):
+    return driver.ex_get_node(self.name)
+
+  def _gce_destory_func(self, driver):
+    return driver.destroy_node
+
+  MACHINE_TYPE = 'n1-standard-2'
+  BOOT_IMAGE = 'boot-image-wip-2'
+  STARTUP_SCRIPT = 'metadata_watcher.py'
+  TAGS=('http-server',)
+  def create(self, driver):
+    TimerLog.log(self, "CREATE")
+    
+    node = driver.deploy_node(
+      self.name,
+      size=self.MACHINE_TYPE,
+      image=self.IMAGE,
+      script=self.STARTUP_SCRIPT,
+      ex_tags=self.TAGS)
+
+  def public_ips(self, driver):
     try:
-      return parseTime(
-        driver.ex_get_snapshot(self.name).extra['creationTimestamp'])
-      return ss.status == 'READY'
+      return self._gce_obj(driver).public_ips
     except ResourceNotFoundError:
-      return inf
+      return []
+
+  def fetch(self, driver, name=""):
+    if name:
+      name = '/%s' % name
+
+    try:
+      return urllib2.urlopen(
+          "http://%s/tmp%s" % (
+              self.public_ips(driver)[0], name)).read()
+    except (urllib2.HTTPError, urllib2.URLError) as e:
+      return None
 
   def ready(self, driver):
-    try:
-      ss = driver.ex_get_snapshot(self.name)
-      if ss.status != 'READY'
-        return inf
-      return TimerLog.log(self, "READY")
-    except ResourceNotFoundError:
+    if GCEObject.ready(driver) == inf:
       return inf
 
-  def destory(self, driver):
-    assert self.exists(driver)
-    assert self.ready(driver)
-    TimerLog(self, "DESTROY")
-    driver.destroy_volume_snapshot(driver.ex_get_snapshot(self.name))
+    if not self.fetch(driver):
+      return inf
+
+    return TimeLog.log(self, "READY")
+
+  def attach(self, driver, disk, mode):
+    assert self.exists()
+    assert self.ready()
+    assert isinstance(disk, Disk)
+    assert disk.exists(driver)
+    assert disk.ready(driver)
+
+    TimerLog.log(self, "ATTACH", disk, mode)
+
+    driver.attach_volume(
+      node=self._gce_obj(driver),
+      volume=disk._gce_obj(driver),
+      device=disk.name,
+      ex_mode=mode)
+
+  def attached(self, driver, disk):
+    assert self.exists()
+    assert self.ready()
+    assert isinstance(disk, Disk)
+    assert disk.exists(driver)
+    assert disk.ready(driver)
+    return disk in self.disks(driver)
+
+  def disks(self, driver):
+    disks = []
+    for d in self._gce_obj(driver).extra['disks']:
+      if d['kind'] != 'compute#attachedDisk':
+        continue
+
+      disk = Disk(d['deviceName')
+      assert disk.exists(driver)
+      assert disk.ready(driver)
+      disks.append(disk)
+    return disks 
+
+  def detach(self, driver, disk):
+    assert self.exists()
+    assert self.ready()
+    assert isinstance(disk, Disk)
+    assert disk.exists(driver)
+    assert disk.ready(driver)
+    assert disk in self.disks(driver)
+
+    TimeLog.log(self, "DETACH", disk)
+    driver.detach_volume(
+      volume=disk._gce_obj(driver),
+      ex_node=self._gce_obj(driver))
+
+  def get_metadata(self, driver):
+    metadata = {}
+    for d in self._gce_obj(driver).extra['metadata']['items']:
+      v = d['value']
+      if v.startswith('{') or v.startswith('[') or v.startswith('"'):
+        try:
+          v = simplejson.loads(v)
+        except:
+          pass
+      metadata[d['key']] = d['value']
+    return metadata
+
+  def set_metadata(self, driver, data=None, **kw):
+    metadata = self.metadata(driver)
+    if data:
+      metadata.update(kw)
+    metadata.update(kw)
+    for key in metadata.keys():
+      v = metadata[key]
+      if isinstance(v, (int, long, float, str, unicode)):
+        continue
+      elif isinstance(metadata[key], (list, dict)):
+        metadata[key] = simplejson.dumps(metadata[key])
+      else:
+        raise TypeError("Can't set metadata key %s to %r" % (key, v))
+    driver.ex_set_node_metadata(self._gce_obj(driver), metadata)
+
+
+
 
 #############################################################
 #############################################################
+
+class Tasklet(object):
+  def __init__(self, task_id):
+    self.task_id = task_id
+
+  def is_startable(self):
+    raise NotImplementedError()
+
+  def is_running(self):
+    raise NotImplementedError()
+
+  def is_finished(self):
+    raise NotImplementedError()
+
+  def run(self):
+    raise NotImplementedError()
+
 
 class CreateXFromY(Tasklet):
   def __init__(self, task_id, src, dst):
@@ -239,7 +331,7 @@ class CreateXFromY(Tasklet):
     self.src = src
     self.dst = dst
 
-  def is_ready(self, driver):
+  def is_startable(self, driver):
     return self.src.exists(driver)
 
   def is_running(self, driver):
@@ -249,8 +341,8 @@ class CreateXFromY(Tasklet):
     return self.dst.ready(driver)
 
   def run(self, driver):
+    assert self.src.exists(driver)
     assert not self.dst.exists(driver)
-    TimerLog(self, "DESTROY")
     self.dst.create(driver, self.src.name)
 
 
@@ -269,7 +361,137 @@ class CreateSnapshotFromDisk(Tasklet):
 
 
 class CreateInstance(Tasklet):
-  def __init__(self, 
+  def __init__(self, task_id, instance, required_snapshots):
+    Tasklet.__init__(self, task_id)
+    self.instance = instance
+
+  def is_startable(self, driver):
+    return max([ss.ready(driver) for ss in self.snapshots])
+
+  def is_running(self, driver):
+    return self.instance.exists(driver)
+
+  def is_done(self, driver):
+    return self.instance.ready(driver)
+
+  def run(self, driver):
+    self.instance.create(driver)
+
+
+class AttachDisksToInstance(Tasklet):
+  def __init__(self, task_id, instance, disks):
+    Tasklet.__init__(self, task_id)
+    self.instance = instance
+    self.disks = disks
+
+  def is_startable(self, driver):
+    return max([self.instance.ready(driver)]+[d.ready(driver) for d in self.disks])
+
+  def is_running(self, driver):
+    return inf
+
+  def is_done(self, driver):
+    for disk in self.disks:
+      if not self.instance.attached(disk):
+        return False
+    return True
+
+  def run(self, driver):
+    for disk in self.disks:
+      self.instance.attach(disk)
+
+
+class MetadataTasklet(Tasklet):
+  METADATA_KEY=None
+
+  def __init__(self, task_id, instance):
+    Tasklet.__init__(self, task_id)
+    self.instance = instance
+
+  def _required_metadata(self, driver):
+    raise NotImplementedError()
+
+  def is_running(self, driver):
+    metadata = self.instance.get_metadata(driver)
+    if self.METADATA_KEY not in metadata:
+      return False
+
+    for data in self._metadata_values(driver):
+      if data not in metadata[self.METADATA_KEY]:
+        return False
+    return True
+
+  def run(self, driver):
+    metadata = self.instance.get_metadata(driver)
+    if self.METADATA_KEY not in metadata:
+      metadata[self.METADATA_KEY] = []
+
+    for data in self._metadata_values(driver):
+      if data not in metadata[self.METADATA_KEY]:
+        metadata[self.METADATA_KEY].append(data)
+
+    self.instance.set_metadata(driver, mount=metadata[self.METADATA_KEY])
+    
+
+
+class MountDisksInInstance(MetadataTasklet):
+  METADATA_KEY='mount'
+
+  def __init__(self, task_id, instance, disk_and_mnt):
+    MetadataTasklet.__init__(self, task_id, instance)
+    self.disks = disks
+
+  def _required_metadata(self, driver):
+    data = [] 
+    for disk, mnt in self.disks:
+      data.append({
+        'mount-point': mnt,
+        'disk-id': disk.name,
+        'user': 'ubuntu',
+      })
+    return data
+
+  def is_startable(self, driver):
+    check = AttachDisksToInstance(None, instance, [disk for disk, mnt in self.disks_and_mnt])
+    return check.is_done(driver)
+
+  def is_done(self, driver):
+    return self.instance.fetch("mount") is not None
+
+
+class UnmountDisksInInstance(MountDisksInInstance):
+  METADATA_KEY='umount'
+
+
+
+class RunCommandOnInstance(MetadataTasklet):
+  METADATA_KEY='long-commands'
+
+  def __init__(self, task_id, mnt_task, instance, command):
+    MetadataTasklet.__init__(self, task_id, instance)
+    self.command = command
+    
+  def _required_metadata(self, driver):
+    return [self.command]
+
+  def is_startable(self, driver):
+    return self.mount_task.is_done(driver)
+
+
+
+class SyncStage(object):
+
+  def tasklets(self):
+    name = '-'.join([NoDash(getpass.getuser()), NoDash(commit), NoDash(BUILD_PLATFORM), self.__class__.__name__])
+
+    return [
+      CreateInstance("%s-%s" % (name, instance)),
+      CreateDisksFromSnapshots(
+
+
+
+
+
 
 # Tasks
 # create instances
@@ -417,17 +639,6 @@ class Instance(object):
     except ResourceNotFoundError:
       return False
 
-  def update_metadata(self, new_data, node=None):
-    self.log("upating metadata with %s", new_data)
-    self.timer.start("update_metadata")
-    node = node or self.driver.ex_get_node(self.name)
-
-    metadata = {}
-    for d in node.extra['metadata']['items']:
-      metadata[d['key']] = d['value']
-    metadata.update(new_data)
-    self.driver.ex_set_node_metadata(node, metadata)
-    self.timer.stop("update_metadata")
 
   def launch(self, machine_type, disks):
     self.timer.start("launch")
