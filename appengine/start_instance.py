@@ -1,5 +1,5 @@
 
-import libcloud_gce
+import libcloud_gae
 import webapp2
 import time
 
@@ -7,11 +7,11 @@ import time
 class StartInstanceHandler(webapp2.RequestHandler):
   def get(self):
     start = time.time()
-    node = libcloud_gce.new_driver().deploy_node(
+    node = libcloud_gae.new_driver().deploy_node(
         'appengine-created-instance',
-        size=libcloud_gce.MACHINE_TYPE,
-        image=libcloud_gce.BOOT_IMAGE,
-        script=libcloud_gce.STARTUP_SCRIPT)
+        size=libcloud_gae.MACHINE_TYPE,
+        image=libcloud_gae.BOOT_IMAGE,
+        script=libcloud_gae.STARTUP_SCRIPT)
     self.response.write('%s %s' % (time.time() - start, node))
 
 

@@ -1,0 +1,4 @@
+cron:
+- description: polling gce
+  url: /poll_gce/schedule
+  schedule: every 1 mins

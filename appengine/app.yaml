@@ -15,8 +15,11 @@ handlers:
 - url: /start-instance/?
   script: start_instance.APP
 
+- url: /poll_gce/.*
+  script: poll_gce.APP
+
 - url: /.*
-  script: helloworld.APP
+  script: printenv.APP
 
 libraries:
 - name: ssl

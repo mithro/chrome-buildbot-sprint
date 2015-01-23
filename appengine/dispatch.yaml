@@ -6,5 +6,5 @@ dispatch:
   module: default
 
 # Send all work to the one static backend.
-- url: "*/work/*"
-  module: static-backend
+#- url: "*/work/*"
+#  module: static-backend
