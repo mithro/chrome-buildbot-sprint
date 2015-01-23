@@ -1,3 +1,7 @@
+#!/usr/bin/python
+#
+# -*- coding: utf-8 -*-
+# vim: set ts=4 sw=4 et sts=4 ai:
 
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
@@ -88,13 +92,13 @@ class PollGceHandler(webapp2.RequestHandler):
                        time=120)
 
     for node in nodes:
-        Instance(node.name).update_from_gce(node)
+        Instance.load(node.name, gce_obj=node)
 
     for volume in volumes:
-        Disk(volume.name).update_from_gce(volume)
+        Disk.load(volume.name, gce_obj=volume)
 
     for snapshot in snapshots:
-        Snapshot(snapshot.name).update_from_gce(snapshot)
+        Snapshot.load(snapshot.name, gce_obj=snapshot)
 
     result = PAGE_TEMPLATE.format(
         'poll_gce/do',
