@@ -100,17 +100,24 @@ time ninja -C out/Debug;
 
 if __name__ == "__main__":
   import libcloud_gae
+  driver = libcloud_gae.new_driver()
+  starting_snap = Snapshot.load(SnapshotName("commit0", "src"), driver=driver)
+  assert starting_snap.exists(), starting_snap.name
 
   import threading
   import pprint
   class Updater(threading.Thread):
+    output = True
+    ready = False
+    go = True
+
     def skip(self, obj):
       return not obj.name.startswith(NoDash(getpass.getuser()))
 
     def run(self):
       driver = libcloud_gae.new_driver()
     
-      while True:
+      while self.go:
         nodes = driver.list_nodes()
         volumes = driver.list_volumes()
         snapshots = driver.ex_list_snapshots()
@@ -121,27 +128,28 @@ if __name__ == "__main__":
           Instance.load(node.name, gce_obj=node)
 
         for volume in volumes:
-          if self.skip(node):
+          if self.skip(volume):
             continue
           Disk.load(volume.name, gce_obj=volume)
 
         for snapshot in snapshots:
-          if self.skip(node):
+          if self.skip(snapshot):
             continue
           Snapshot.load(snapshot.name, gce_obj=snapshot)
 
-        print "="*80+'\n', time.time(), "Finish updating gce\n", pprint.pformat(memcache), '\n'+"="*80+'\n'
+        self.ready = True
+        if self.output:
+          print "="*80+'\n', time.time(), "Finish updating gce\n", pprint.pformat(memcache), '\n'+"="*80+'\n'
 
         time.sleep(1)
 
   updater = Updater()
   updater.start()
-
+  while not updater.ready and updater.is_alive():
+    time.sleep(1)
 
   previous_commit = "commit0"
   current_commit = "commit1"
-
-  driver = libcloud_gae.new_driver()
 
   print "SyncStage"
   print "-"*80
@@ -151,9 +159,9 @@ if __name__ == "__main__":
     if isinstance(t, WaitOnOtherTasks):
       print "-->", t.task_to_run
       print "-->", ('startable', t.task_to_run.is_startable()), ('running', t.task_to_run.is_running()), ('done', t.task_to_run.is_finished())
-
     print
 
+  """
   print "-"*80
   print
   print "BuildStage"
@@ -163,23 +171,31 @@ if __name__ == "__main__":
     print ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished())
     print
   print "-"*80
+  """
 
-  while updater.is_alive():
-    for t in SyncStage(previous_commit, current_commit).tasklets():
-      if t.is_startable():
-        if t.is_running():
-          print time.time(), t.tid, "running"
-          continue
+  try:
+    while updater.is_alive():
+      for t in SyncStage(previous_commit, current_commit).tasklets():
+        print time.time(), t.tid, ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished()),
+        if t.is_startable():
+          if t.is_running():
+            print "running"
+            continue
 
-        if t.is_finished():
-          print time.time(), t.tid, "finished"
-          continue
+          if t.is_finished():
+            print "finished"
+            continue
 
-        print time.time(), t.tid, "starting"
-        t.run(driver)
-        print time.time(), t.tid, "started"
-      else:
-        print time.time(), t.tid, "pending"
+          print "starting"
+          updater.output = False
+          raw_input("run?")
+          updater.output = True
+          t.run(driver)
+        else:
+          print "pending"
 
-    print "-" * 80
-    time.sleep(1)
+      print "-" * 80
+      break
+  finally:
+    updater.go = False
+    updater.join()

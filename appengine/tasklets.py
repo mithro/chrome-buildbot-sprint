@@ -17,16 +17,16 @@ class Tasklet(object):
     self.tid = tid
 
   def is_startable(self):
-    raise NotImplementedError()
+    raise NotImplementedError("%s.is_startable()" % self.__class__)
 
   def is_running(self):
-    raise NotImplementedError()
+    raise NotImplementedError("%s.is_running()" % self.__class__)
 
   def is_finished(self):
-    raise NotImplementedError()
+    raise NotImplementedError("%s.is_finished()" % self.__class__)
 
   def run(self, driver):
-    raise NotImplementedError()
+    raise NotImplementedError("%s.run()" % self.__class__)
 
 
 class CreateXFromY(Tasklet):
@@ -121,7 +121,7 @@ class DetachDiskFromInstance(AttachDiskToInstance):
     if not self.instance.exists():
       return False
 
-    if not self.disks.exists():
+    if not self.disk.exists():
       return False
 
     return True
@@ -253,9 +253,7 @@ class WaitOnOtherTasks(Tasklet):
   def is_finished(self):
     return self.task_to_run.is_finished() and self.is_startable()
 
-  # Map everything else onto the task which should run
-  def __getattr__(self, key):
-    return getattr(self, self.task_to_run, key)
-
+  def run(self, driver):
+    return self.task_to_run.run(driver)
   
 

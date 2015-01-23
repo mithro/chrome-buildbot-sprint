@@ -53,7 +53,8 @@ class GCEObject(dict):
     return type(self).__name__.lower() + ':' + self.name
 
   # Functions to get/destroy stuff on gce
-  def _gce_obj_get(self, driver):
+  @staticmethod
+  def _gce_obj_get(driver, name):
     raise NotImplementedError()
 
   @staticmethod
@@ -65,6 +66,7 @@ class GCEObject(dict):
     return gce_obj.extra['status']
 
   def update_from_gce(self, gce_obj):
+    assert self.name == gce_obj.name, "%s != %s" % (self.name, gce_obj.name)
     self.name = gce_obj.name
     self.create_time = parse_time(gce_obj.extra['creationTimestamp'])
     self.status = self._gce_obj_status(gce_obj)
@@ -76,8 +78,7 @@ class GCEObject(dict):
   def load(cls, name, driver=None, gce_obj=None):
     if driver:
       try:
-        assert name == gce_obj.name, "%s != %s" % (name, gce_obj.name)
-        return cls.load(gce_obj=self._gce_obj_get(self, driver))
+        return cls.load(name, gce_obj=cls._gce_obj_get(driver, name))
       except ResourceNotFoundError:
         pass
 
@@ -113,14 +114,14 @@ class GCEObject(dict):
   def destroy(self, driver):
     assert self.exists()
     assert self.ready()
-    TimerLog.log(self, "DESTROY")
-    self._gce_obj_destory(driver, self._gce_obj_get(driver))
+    self._gce_obj_destory(driver, self._gce_obj_get(driver, self.name))
 
 
 class Disk(GCEObject):
   # Functions to get/destroy stuff on gce
-  def _gce_obj_get(self, driver):
-    return driver.ex_get_volume(self.name)
+  @staticmethod
+  def _gce_obj_get(driver, name):
+    return driver.ex_get_volume(name)
 
   @staticmethod
   def _gce_obj_destory(driver, gce_obj):
@@ -129,15 +130,15 @@ class Disk(GCEObject):
   # ---------------------------------
 
   def create(self, driver, from_snapshot):
-    TimerLog.log(self, "CREATE")
     self.update_from_gce(
         driver.create_volume(size=None, name=self.name, snapshot=from_snapshot, ex_disk_type='pd-ssd'))
 
 
 class Snapshot(GCEObject):
   # Functions to get/destroy stuff on gce
-  def _gce_obj_get(self, driver):
-    return driver.ex_get_snapshot(self.name)
+  @staticmethod
+  def _gce_obj_get(driver, name):
+    return driver.ex_get_snapshot(name)
 
   @staticmethod
   def _gce_obj_destory(driver, gce_obj):
@@ -152,7 +153,6 @@ class Snapshot(GCEObject):
   # ---------------------------------
 
   def create(self, driver, from_disk):
-    TimeLog.log(self, "CREATE")
     self.update_from_gce(
        driver.create_volume_snapshot(driver.ex_get_volume(from_disk), self.name))
 
@@ -160,8 +160,9 @@ class Snapshot(GCEObject):
 
 class Instance(GCEObject):
   # Functions to get/destroy stuff on gce
-  def _gce_obj_get(self, driver):
-    return driver.ex_get_node(self.name)
+  @staticmethod
+  def _gce_obj_get(driver, name):
+    return driver.ex_get_node(name)
 
   @staticmethod
   def _gce_obj_destory(driver, gce_obj):
@@ -172,14 +173,15 @@ class Instance(GCEObject):
     self.public_ips = gce_obj.public_ips
 
     metadata = {}
-    for d in gce_obj.extra['metadata']['items']:
-      v = d['value']
-      if v.startswith('{') or v.startswith('[') or v.startswith('"'):
-        try:
-          v = simplejson.loads(v)
-        except:
-          pass
-      metadata[d['key']] = d['value']
+    if 'metadata' in gce_obj.extra and 'items' in gce_obj.extra['metadata']:
+      for d in gce_obj.extra['metadata']['items']:
+        v = d['value']
+        if v.startswith('{') or v.startswith('[') or v.startswith('"'):
+          try:
+            v = simplejson.loads(v)
+          except:
+            pass
+        metadata[d['key']] = d['value']
     self.metadata = metadata
 
     self.disks = []
@@ -228,18 +230,17 @@ class Instance(GCEObject):
 
   MACHINE_TYPE = 'n1-standard-2'
   BOOT_IMAGE = 'boot-image-wip-2'
-  STARTUP_SCRIPT = 'metadata_watcher.py'
+  STARTUP_SCRIPT_URL = 'https://raw.githubusercontent.com/mithro/chrome-buildbot-sprint/master/metadata_watcher.py'
   TAGS = ('http-server',)
 
   def create(self, driver):
-    TimerLog.log(self, "CREATE")
-
-    self.update_from_gce(driver.deploy_node(
+    self.update_from_gce(driver.create_node(
       self.name,
       size=self.MACHINE_TYPE,
-      image=self.IMAGE,
-      script=self.STARTUP_SCRIPT,
-      ex_tags=self.TAGS))
+      image=self.BOOT_IMAGE,
+      ex_tags=self.TAGS,
+      ex_metadata={'startup-script-url': self.STARTUP_SCRIPT_URL},
+      ))
 
   def attach(self, driver, disk, mode):
     assert self.exists()
@@ -248,11 +249,9 @@ class Instance(GCEObject):
     assert disk.exists(driver)
     assert disk.ready(driver)
 
-    TimerLog.log(self, "ATTACH", disk, mode)
-
     driver.attach_volume(
-      node=self._gce_obj_get(driver),
-      volume=disk._gce_obj_get(driver),
+      node=self._gce_obj_get(driver, self.name),
+      volume=disk._gce_obj_get(driver, disk.name),
       device=disk.name,
       ex_mode=mode)
 
@@ -265,8 +264,8 @@ class Instance(GCEObject):
     assert disk in self.disks(driver)
 
     driver.detach_volume(
-      volume=disk._gce_obj_get(driver),
-      ex_node=self._gce_obj_get(driver))
+      volume=disk._gce_obj_get(driver, self.name),
+      ex_node=self._gce_obj_get(driver, disk.name))
 
   def set_metadata(self, driver, data=None, **kw):
     metadata = copy.deepcopy(self.metadata)
@@ -281,5 +280,5 @@ class Instance(GCEObject):
         metadata[key] = simplejson.dumps(metadata[key])
       else:
         raise TypeError("Can't set metadata key %s to %r" % (key, v))
-    driver.ex_set_node_metadata(self._gce_obj_get(driver), metadata)
+    driver.ex_set_node_metadata(self._gce_obj_get(driver, self.name), metadata)
 
