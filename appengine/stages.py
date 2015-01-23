@@ -33,15 +33,17 @@ class SyncStage(Stage):
     tasks = []
     tasks.append(CreateInstance(sid+"-instance-create", instance, required_snapshots=[previous_snap_src]))
     tasks.append(CreateDiskFromSnapshot(sid+"-disk-src-create", previous_snap_src, disk_src))
-    tasks.append(AttachDiskToInstance(sid+"-disk-src-attach", instance, disk_src))
-    tasks.append(MountDisksInInstance(sid+"-disk-mount", instance, [(disk_src, "/mnt")]))
+    tasks.append(AttachDiskToInstance(sid+"-disk-src-attach", instance, disk_src, 'READ_WRITE'))
+
+    mount_task = MountDisksInInstance(sid+"-disk-mount", instance, [(disk_src, "/mnt")])
+    tasks.append(mount_task)
 
     run_task = RunCommandOnInstance(sid+"-run", instance, """\
 export PATH=$PATH:/mnt/chromium/depot_tools;
 cd /mnt/chromium/src;
 time gclient sync -r %s
 """ % self.current_commit)
-    tasks.append(run_task)
+    tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
 
     umount_task = UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, '/mnt/chromium')])
     tasks.append(WaitOnOtherTasks(umount_task, [run_task]))
@@ -70,10 +72,12 @@ class BuildStage(Stage):
     tasks = []
     tasks.append(CreateInstance(sid+"-instance-create", instance, required_snapshots=[current_snap_src, previous_snap_out]))
     tasks.append(CreateDiskFromSnapshot(sid+"-disk-src-create", current_snap_src, disk_src))
-    tasks.append(AttachDiskToInstance(sid+"-disk-src-attach", instance, disk_src))
+    tasks.append(AttachDiskToInstance(sid+"-disk-src-attach", instance, disk_src, 'READ_ONLY'))
     tasks.append(CreateDiskFromSnapshot(sid+"-disk-out-create", previous_snap_out, disk_out))
-    tasks.append(AttachDiskToInstance(sid+"-disk-out-attach", instance, disk_out))
-    tasks.append(MountDisksInInstance(sid+"-disk-mount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]))
+    tasks.append(AttachDiskToInstance(sid+"-disk-out-attach", instance, disk_out, 'READ_WRITE'))
+
+    mount_task = MountDisksInInstance(sid+"-disk-mount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")])
+    tasks.append(mount_task)
 
     run_task = RunCommandOnInstance(sid+"-run", instance, """\
 export PATH=$PATH:/mnt/chromium/depot_tools;
@@ -81,7 +85,7 @@ cd /mnt/chromium/src;
 time build/gyp_chromium;
 time ninja -C out/Debug;
 """)
-    tasks.append(run_task)
+    tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
 
     umount_task = UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")])
     tasks.append(WaitOnOtherTasks(umount_task, [run_task]))
@@ -195,7 +199,6 @@ if __name__ == "__main__":
           print "pending"
 
       print "-" * 80
-      break
   finally:
     updater.go = False
     updater.join()

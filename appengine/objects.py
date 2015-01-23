@@ -3,7 +3,9 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
+import copy
 import time
+import simplejson
 import urllib2
 
 try:
@@ -179,9 +181,9 @@ class Instance(GCEObject):
         if v.startswith('{') or v.startswith('[') or v.startswith('"'):
           try:
             v = simplejson.loads(v)
-          except:
+          except ImportError:
             pass
-        metadata[d['key']] = d['value']
+        metadata[d['key']] = v
     self.metadata = metadata
 
     self.disks = []
@@ -201,7 +203,7 @@ class Instance(GCEObject):
     self.metadata = {}
 
   def ready(self):
-    if not GCEObject.ready(self):
+    if self.status != "RUNNING":
       return False
 
     if not self.fetch():
@@ -246,8 +248,8 @@ class Instance(GCEObject):
     assert self.exists()
     assert self.ready()
     assert isinstance(disk, Disk)
-    assert disk.exists(driver)
-    assert disk.ready(driver)
+    assert disk.exists()
+    assert disk.ready()
 
     driver.attach_volume(
       node=self._gce_obj_get(driver, self.name),
@@ -259,8 +261,8 @@ class Instance(GCEObject):
     assert self.exists()
     assert self.ready()
     assert isinstance(disk, Disk)
-    assert disk.exists(driver)
-    assert disk.ready(driver)
+    assert disk.exists()
+    assert disk.ready()
     assert disk in self.disks(driver)
 
     driver.detach_volume(

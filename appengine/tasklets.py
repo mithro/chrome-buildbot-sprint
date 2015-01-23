@@ -42,7 +42,7 @@ class CreateXFromY(Tasklet):
     return self.src.exists()
 
   def is_running(self):
-    return self.dst.exists()
+    return self.dst.exists() and not self.is_finished()
 
   def is_finished(self):
     return self.dst.ready()
@@ -80,7 +80,7 @@ class CreateInstance(Tasklet):
     return True
 
   def is_running(self):
-    return self.instance.exists()
+    return self.instance.exists() and not self.is_finished()
 
   def is_finished(self):
     return self.instance.ready()
@@ -90,44 +90,39 @@ class CreateInstance(Tasklet):
 
 
 class AttachDiskToInstance(Tasklet):
-  def __init__(self, tid, instance, disk):
+  def __init__(self, tid, instance, disk, mode):
     Tasklet.__init__(self, tid)
     self.instance = instance
     self.disk = disk
+    self.mode = mode
 
   def is_startable(self):
-    if not self.instance.exists():
+    if not self.instance.exists() and self.instance.ready():
       return False
 
-    if not self.disk.exists():
+    if not self.disk.exists() and self.disk.ready():
       return False
 
     return True
 
   def is_running(self):
-    return True
+    return False
 
   def is_finished(self):
     return self.instance.attached(self.disk)
 
   def run(self, driver):
-    assert self.instance.exists(driver)
-    assert self.disk.exists(driver)
-    self.instance.attach(driver, disk)
+    assert self.instance.exists()
+    assert self.instance.ready()
+    assert self.disk.exists()
+    assert self.disk.ready()
+    self.instance.attach(driver, self.disk, self.mode)
 
 
 class DetachDiskFromInstance(AttachDiskToInstance):
-  def is_startable(self):
-    if not self.instance.exists():
-      return False
 
-    if not self.disk.exists():
-      return False
-
-    return True
-
-  def is_running(self):
-    return True
+  def __init__(self, tid, instance, disk):
+    AttachDiskToInstance.__init__(self, tid, instance, disk, None)
 
   def is_finished(self):
     return not self.instance.attached(self.disk)
@@ -158,7 +153,8 @@ class MetadataTasklet(Tasklet):
     for data in self._metadata_values():
       if data not in metadata[self.METADATA_KEY]:
         return False
-    return True
+
+    return not self.is_finished()
 
   def is_finished(self):
     metadata = self.instance.metadata
@@ -191,7 +187,7 @@ class MountDisksInInstance(MetadataTasklet):
 
   def _metadata_values(self):
     data = [] 
-    for disk, mnt in self.disks:
+    for disk, mnt in self.disks_and_mnts:
       data.append({
         'mount-point': mnt,
         'disk-id': disk.name,
@@ -201,7 +197,7 @@ class MountDisksInInstance(MetadataTasklet):
 
   def is_startable(self):
     for d, mnt in self.disks_and_mnts:
-      if not AttachDiskToInstance(None, self.instance, d).is_finished():
+      if not AttachDiskToInstance(None, self.instance, d, None).is_finished():
         return False
     return True
 
