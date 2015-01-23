@@ -4,20 +4,188 @@
 # vim: set ts=2 sw=2 et sts=2 ai:
 
 
+from objects import *
+
+class Tasklet(object):
+  def __init__(self, task_id):
+    self.task_id = task_id
+
+  def is_startable(self):
+    raise NotImplementedError()
+
+  def is_running(self):
+    raise NotImplementedError()
+
+  def is_finished(self):
+    raise NotImplementedError()
+
+  def run(self):
+    raise NotImplementedError()
+
+
+class CreateXFromY(Tasklet):
+  def __init__(self, task_id, src, dst):
+    Tasklet.__init__(self.task_id)
+
+    self.src = src
+    self.dst = dst
+
+  def is_startable(self, driver):
+    return self.src.exists(driver)
+
+  def is_running(self, driver):
+    return self.dst.exists(driver)
+
+  def is_done(self, driver):
+    return self.dst.ready(driver)
+
+  def run(self, driver):
+    assert self.src.exists(driver)
+    assert not self.dst.exists(driver)
+    self.dst.create(driver, self.src.name)
+
+
+class CreateDiskFromSnapshot(CreateXFromY):
+  def __init__(self, task_id, source_snapshot, destination_disk):
+    assert isinstance(source_snapshot, Snapshot)
+    assert isinstance(destination_disk, Disk)
+    CreateXFromY.__init__(self, task_id, source_snapshot, destination_disk)
+
+
+class CreateSnapshotFromDisk(Tasklet):
+  def __init__(self, task_id, source_disk, destination_snapshot):
+    assert isinstance(source_disk, Disk)
+    assert isinstance(destination_snapshot, Snapshot)
+    CreateXFromY.__init__(self, task_id, source_disk, destination_snapshot)
+
+
+class CreateInstance(Tasklet):
+  def __init__(self, task_id, instance, required_snapshots):
+    Tasklet.__init__(self, task_id)
+    self.instance = instance
+
+  def is_startable(self, driver):
+    return max([ss.ready(driver) for ss in self.snapshots])
+
+  def is_running(self, driver):
+    return self.instance.exists(driver)
+
+  def is_done(self, driver):
+    return self.instance.ready(driver)
+
+  def run(self, driver):
+    self.instance.create(driver)
+
+
+class AttachDisksToInstance(Tasklet):
+  def __init__(self, task_id, instance, disks):
+    Tasklet.__init__(self, task_id)
+    self.instance = instance
+    self.disks = disks
+
+  def is_startable(self, driver):
+    return max([self.instance.ready(driver)]+[d.ready(driver) for d in self.disks])
+
+  def is_running(self, driver):
+    return inf
+
+  def is_done(self, driver):
+    for disk in self.disks:
+      if not self.instance.attached(disk):
+        return False
+    return True
+
+  def run(self, driver):
+    for disk in self.disks:
+      self.instance.attach(disk)
+
+
+class MetadataTasklet(Tasklet):
+  METADATA_KEY=None
+
+  def __init__(self, task_id, instance):
+    Tasklet.__init__(self, task_id)
+    self.instance = instance
+
+  def _required_metadata(self, driver):
+    raise NotImplementedError()
+
+  def is_running(self, driver):
+    metadata = self.instance.get_metadata(driver)
+    if self.METADATA_KEY not in metadata:
+      return False
+
+    for data in self._metadata_values(driver):
+      if data not in metadata[self.METADATA_KEY]:
+        return False
+    return True
+
+  def run(self, driver):
+    metadata = self.instance.get_metadata(driver)
+    if self.METADATA_KEY not in metadata:
+      metadata[self.METADATA_KEY] = []
+
+    for data in self._metadata_values(driver):
+      if data not in metadata[self.METADATA_KEY]:
+        metadata[self.METADATA_KEY].append(data)
+
+    self.instance.set_metadata(driver, mount=metadata[self.METADATA_KEY])
+    
+
+
+class MountDisksInInstance(MetadataTasklet):
+  METADATA_KEY='mount'
+
+  def __init__(self, task_id, instance, disk_and_mnt):
+    MetadataTasklet.__init__(self, task_id, instance)
+    self.disks = disks
+
+  def _required_metadata(self, driver):
+    data = [] 
+    for disk, mnt in self.disks:
+      data.append({
+        'mount-point': mnt,
+        'disk-id': disk.name,
+        'user': 'ubuntu',
+      })
+    return data
+
+  def is_startable(self, driver):
+    check = AttachDisksToInstance(None, instance, [disk for disk, mnt in self.disks_and_mnt])
+    return check.is_done(driver)
+
+  def is_done(self, driver):
+    return self.instance.fetch("mount") is not None
+
+
+class UnmountDisksInInstance(MountDisksInInstance):
+  METADATA_KEY='umount'
+
+
+
+class RunCommandOnInstance(MetadataTasklet):
+  METADATA_KEY='long-commands'
+
+  def __init__(self, task_id, mnt_task, instance, command):
+    MetadataTasklet.__init__(self, task_id, instance)
+    self.command = command
+    
+  def _required_metadata(self, driver):
+    return [self.command]
+
+  def is_startable(self, driver):
+    return self.mount_task.is_done(driver)
+
+
 
 class SyncStage(object):
 
   def tasklets(self):
-    #prev = '-'.
     name = '-'.join([NoDash(getpass.getuser()), NoDash(commit), NoDash(BUILD_PLATFORM), self.__class__.__name__])
 
-    previous_src = Snapshot(previous_src)
-
-    out_src = Disk(
     return [
-      CreateInstance(name, "%s-instance" % name),
-      CreateDiskFromSnapshot( previous_src, out_src),
-      AttachDisksToInstances( 
+      CreateInstance("%s-%s" % (name, instance)),
+      CreateDisksFromSnapshots(
 
 
 
