@@ -3,10 +3,39 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
+import sys
+sys.path.append("third_party/python-dateutil-1.5")
 
-class GCEObject(object):
+import calendar
+import dateutil.parser
+import time
+from google.appengine.api import memcache
+from libcloud_gae import ResourceNotFoundError
+
+
+def parse_time(timestamp_str):
+  dt = dateutil.parser.parse(timestamp_str)
+  return calendar.timegm(dt.utctimetuple())+1e-6*dt.microsecond
+
+
+class GCEObject(dict):
   def __init__(self, name):
+    dict.__init__(self)
     self.name = name
+
+  # All attributes are dict entries
+  def __setattr__(self, key, value):
+    self[key] = value
+
+  def __getattr__(self, key):
+    return self[key]
+
+  # For pickle
+  def __setstate__(self, state):
+    self.__dict__ = state
+
+  def __getstate__(self):
+    return self.__dict__
 
   def _gce_obj(self, driver):
     raise NotImplementedError()
@@ -14,41 +43,52 @@ class GCEObject(object):
   def _gce_destroy_func(self, driver):
     raise NotImplementedError()
 
-  def _status(self, driver):
+  def _status(self, gce_obj):
     try:
-      self._gce_obj(driver).status['status']
+      return gce_obj.extra['status']
     except ResourceNotFoundError:
       return "IMAGINARY"
 
-  def _create_time(self, driver):
-    return parseTime(self._gce_obj(driver).extra['creationTimestamp'])
+  def _create_time(self, gce_obj):
+    try:
+      return parse_time(gce_obj.extra['creationTimestamp'])
+    except ResourceNotFoundError:
+      return inf
+
+  def _cache_key(self):
+    return type(self).__name__.lower() + ':' + self.name
 
   def __eq__(self, other):
     return type(self) == type(other) and self.name == other.name
 
-  def exists(self, driver):
-    try:
-      return True
-    except ResourceNotFoundError:
-      return False
+  def update_from_gce(self, gce_obj):
+    self.name = gce_obj.name
+    self.create_time = self._create_time(gce_obj)
+    self.status = self._status(gce_obj)
+    memcache.set(self._cache_key(), self, time=120)
 
-  def ready(self, driver):
-    try:
-      if self._status(driver) != "READY":
-        return False
-      return True
-    except ResourceNotFoundError:
-      return False
+  def load(self, name, driver):
+    cached = memcache.get(self._cache_key())
+    if cached:
+      self.update(cached)
+    else:
+      self.update_from_gce(driver.ex_get_volume(name))
+
+  def exists(self):
+    return self.create_time != inf
+
+  def ready(self):
+    return self.status == "READY"
 
   def destroy(self, driver):
-    assert self.exists(driver)
-    assert self.ready(driver)
+    assert self.exists()
+    assert self.ready()
     TimerLog.log(self, "DESTROY")
     self._gce_destory_func(driver)(self._gce_obj(driver))
 
 
-
 class Disk(GCEObject):
+
   def _gce_obj(self, driver):
     return driver.ex_get_volume(self.name)
 
@@ -57,9 +97,8 @@ class Disk(GCEObject):
 
   def create(self, driver, from_snapshot):
     TimerLog.log(self, "CREATE")
-    driver.create_volume(size=None, name=self.name, snapshot=from_snapshot, ex_disk_type='pd-ssd')
-
-
+    self.update_from_gce(
+        driver.create_volume(size=None, name=self.name, snapshot=from_snapshot, ex_disk_type='pd-ssd'))
 
 
 class Snapshot(GCEObject):
@@ -71,15 +110,16 @@ class Snapshot(GCEObject):
 
   # For some reason snapshot status is only available via .status rather than
   # .extra['status']!?
-  def _status(self, driver):
+  def _status(self, gce_obj):
     try:
-      return self._gce_obj(driver).status
+      return gce_obj.status
     except ResourceNotFoundError:
       return "IMAGINARY"
 
   def create(self, driver, from_disk):
     TimeLog.log(self, "CREATE")
-    driver.create_volume_snapshot(driver.ex_get_volume(from_disk), self.name)
+    self.update_from_gce(
+       driver.create_volume_snapshot(driver.ex_get_volume(from_disk), self.name))
 
 
 
@@ -96,7 +136,7 @@ class Instance(GCEObject):
   TAGS=('http-server',)
   def create(self, driver):
     TimerLog.log(self, "CREATE")
-    
+
     node = driver.deploy_node(
       self.name,
       size=self.MACHINE_TYPE,
@@ -163,7 +203,7 @@ class Instance(GCEObject):
       assert disk.exists(driver)
       assert disk.ready(driver)
       disks.append(disk)
-    return disks 
+    return disks
 
   def detach(self, driver, disk):
     assert self.exists()
@@ -191,7 +231,7 @@ class Instance(GCEObject):
     return metadata
 
   def set_metadata(self, driver, data=None, **kw):
-    metadata = self.metadata(driver)
+    metadata = self.get_metadata(driver)
     if data:
       metadata.update(kw)
     metadata.update(kw)
