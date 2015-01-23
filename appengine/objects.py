@@ -21,7 +21,7 @@ class GCEObject(object):
       return "IMAGINARY"
 
   def _create_time(self, driver):
-    self._gce_obj(driver).extra['creationTimestamp'])
+    return parseTime(self._gce_obj(driver).extra['creationTimestamp'])
 
   def __eq__(self, other):
     return type(self) == type(other) and self.name == other.name
@@ -159,7 +159,7 @@ class Instance(GCEObject):
       if d['kind'] != 'compute#attachedDisk':
         continue
 
-      disk = Disk(d['deviceName')
+      disk = Disk(d['deviceName'])
       assert disk.exists(driver)
       assert disk.ready(driver)
       disks.append(disk)
