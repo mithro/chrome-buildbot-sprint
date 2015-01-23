@@ -45,14 +45,20 @@ time gclient sync -r %s
 """ % self.current_commit)
     tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
 
-    umount_task = UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, '/mnt/chromium')])
-    tasks.append(WaitOnOtherTasks(umount_task, [run_task]))
+    umount_task = WaitOnOtherTasks(
+        UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, '/mnt/chromium')]),
+        [run_task])
+    tasks.append(umount_task)
 
-    detach_task = DetachDiskFromInstance(sid+"-disk-src-detach", instance, disk_src)
-    tasks.append(WaitOnOtherTasks(detach_task, [umount_task]))
+    detach_task = WaitOnOtherTasks(
+        DetachDiskFromInstance(sid+"-disk-src-detach", instance, disk_src),
+        [umount_task])
+    tasks.append(detach_task)
 
-    snapshot_task = CreateSnapshotFromDisk(sid+"-disk-src-snapshot", disk_src, snap_src)
-    tasks.append(WaitOnOtherTasks(snapshot_task, [detach_task]))
+    snapshot_task = WaitOnOtherTasks(
+        CreateSnapshotFromDisk(sid+"-disk-src-snapshot", disk_src, snap_src),
+        [detach_task])
+    tasks.append(snapshot_task)
 
     return tasks
 

@@ -578,13 +578,17 @@ Current project metadata:
         data["instance-name"] = socket.gethostname()
         print "Posting data to callback URL %s:" % url
         pprint.pprint(data)
-        try:
-            encoded_data = urllib.urlencode({'data': simplejson.dumps(data)})
-            response = urllib2.urlopen(url, data=encoded_data).read()
-            print 'Callback response: %s' % response
-        except Exception as e:
-            print 'Callback error:', e
-
+        while True:
+            try:
+                encoded_data = urllib.urlencode({'data': simplejson.dumps(data)})
+                response = urllib2.urlopen(url, data=encoded_data).read()
+                print 'Callback response: %s' % response
+                break
+            except Exception as e:
+                print 'Callback error:', e
+                print e.headers.items()
+                print e.fp.read()
+                time.sleep(10)
 
 class Handler(object):
     def __init__(self, server, metadata_watcher):

@@ -97,7 +97,7 @@ class AttachDiskToInstance(Tasklet):
     self.mode = mode
 
   def is_startable(self):
-    if not self.instance.exists() and self.instance.ready():
+    if not self.instance.exists() or not self.instance.ready():
       return False
 
     if not self.disk.exists() and self.disk.ready():
