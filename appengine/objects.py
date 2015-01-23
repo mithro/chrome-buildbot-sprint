@@ -52,17 +52,6 @@ class GCEObject(dict):
   def _cache_key(self):
     return type(self).__name__.lower() + ':' + self.name
 
-  def refresh(self, driver):
-    cached = memcache.get(self._cache_key())
-    if cached:
-      self.update(cached)
-    else:
-      try:
-        self.update_from_gce(self._gce_obj_get(driver))
-        memcache.set(self._cache_key(), self, time=120)
-      except ResourceNotFoundError, e:
-        memcache.delete(self._cache_key())
-
   # Functions to get/destroy stuff on gce
   def _gce_obj_get(self, driver):
     raise NotImplementedError()
@@ -78,11 +67,33 @@ class GCEObject(dict):
   def update_from_gce(self, gce_obj):
     self.name = gce_obj.name
     self.create_time = parse_time(gce_obj.extra['creationTimestamp'])
-    self.status = self._status(gce_obj)
+    self.status = self._gce_obj_status(gce_obj)
 
   # ---------------------------------
+  _sentinal = []
 
-  def __init__(self, name):
+  @classmethod
+  def load(cls, name, driver=None, gce_obj=None):
+    if driver:
+      try:
+        assert name == gce_obj.name, "%s != %s" % (name, gce_obj.name)
+        return cls.load(gce_obj=self._gce_obj_get(self, driver))
+      except ResourceNotFoundError:
+        pass
+
+    obj = cls(name, sentinal=cls._sentinal)
+    cached = memcache.get(obj._cache_key())
+    if cached:
+      obj.update(cached)
+
+    if gce_obj:
+      obj.update_from_gce(gce_obj)
+
+    memcache.set(obj._cache_key(), obj, time=120)
+    return obj
+
+  def __init__(self, name, sentinal=None):
+    assert sentinal is self._sentinal
     dict.__init__(self)
     self.name = name
     self.status = "IMAGINARY"
@@ -91,15 +102,13 @@ class GCEObject(dict):
   def __eq__(self, other):
     return type(self) == type(other) and self.name == other.name
 
-  def exists(self, driver=None):
-    if driver:
-      self.refresh(driver)
+  def exists(self):
     return self.create_time != inf
 
-  def ready(self, driver=None):
-    if driver:
-      self.refresh(driver)
+  def ready(self):
     return self.status == "READY"
+
+  # ---------------------------------
 
   def destroy(self, driver):
     assert self.exists()
@@ -154,6 +163,7 @@ class Instance(GCEObject):
   def _gce_obj_get(self, driver):
     return driver.ex_get_node(self.name)
 
+  @staticmethod
   def _gce_obj_destory(driver, gce_obj):
     return driver.destroy_node(gce_obj)
 
@@ -177,35 +187,42 @@ class Instance(GCEObject):
       if d['kind'] != 'compute#attachedDisk':
         continue
 
-      disk = Disk(d['deviceName'])
+      disk = Disk.load(d['deviceName'])
       self.disks.append(disk)
 
   # ---------------------------------
 
-  def __init__(self, name):
-    GCEObject.__init__(self, name)
+  def __init__(self, name, sentinal=None):
+    GCEObject.__init__(self, name, sentinal)
     self.public_ips = []
     self.disks = []
     self.metadata = {}
 
-  def ready(self, driver=None):
-    if driver:
-      self.refresh(driver)
-
-    if not GCEObject.ready(self, driver):
+  def ready(self):
+    if not GCEObject.ready(self):
       return False
 
-    if not self.fetch(driver):
+    if not self.fetch():
       return False
 
     return True
 
-  def attached(self, disk, driver=None):
-    if driver:
-      self.refresh(driver)
-      disk.refresh(driver)
-
+  def attached(self, disk):
     return disk in self.disks
+
+  def fetch(self, name=""):
+    if name:
+      name = '/%s' % name
+
+    if not self.public_ips:
+      return None
+
+    try:
+      return urllib2.urlopen(
+          "http://%s/tmp%s" % (
+              self.public_ips[0], name)).read()
+    except (urllib2.HTTPError, urllib2.URLError) as e:
+      return None
 
   # ---------------------------------
 
@@ -224,26 +241,7 @@ class Instance(GCEObject):
       script=self.STARTUP_SCRIPT,
       ex_tags=self.TAGS))
 
-  def fetch(self, driver, name=""):
-    self.refresh(driver)
-
-    if name:
-      name = '/%s' % name
-
-    if not self.public_ips:
-      return None
-
-    try:
-      return urllib2.urlopen(
-          "http://%s/tmp%s" % (
-              self.public_ips[0], name)).read()
-    except (urllib2.HTTPError, urllib2.URLError) as e:
-      return None
-
   def attach(self, driver, disk, mode):
-    self.refresh(driver)
-    disk.refresh(driver)
-
     assert self.exists()
     assert self.ready()
     assert isinstance(disk, Disk)
@@ -259,9 +257,6 @@ class Instance(GCEObject):
       ex_mode=mode)
 
   def detach(self, driver, disk):
-    self.refresh(driver)
-    disk.refresh(driver)
-
     assert self.exists()
     assert self.ready()
     assert isinstance(disk, Disk)
@@ -269,15 +264,11 @@ class Instance(GCEObject):
     assert disk.ready(driver)
     assert disk in self.disks(driver)
 
-    TimeLog.log(self, "DETACH", disk)
     driver.detach_volume(
       volume=disk._gce_obj_get(driver),
       ex_node=self._gce_obj_get(driver))
 
   def set_metadata(self, driver, data=None, **kw):
-    if driver:
-      self.refresh(driver)
-
     metadata = copy.deepcopy(self.metadata)
     if data:
       metadata.update(kw)

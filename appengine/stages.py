@@ -24,11 +24,11 @@ class SyncStage(Stage):
   def tasklets(self):
     sid = self.stage_id
 
-    previous_snap_src = Snapshot(SnapshotName(self.previous_commit, "src"))
+    previous_snap_src = Snapshot.load(SnapshotName(self.previous_commit, "src"))
 
-    instance = Instance("%s-instance" % sid)
-    disk_src = Disk("%s-disk-src" % sid)
-    snap_src = Snapshot(SnapshotName(self.current_commit, "src"))
+    instance = Instance.load("%s-instance" % sid)
+    disk_src = Disk.load("%s-disk-src" % sid)
+    snap_src = Snapshot.load(SnapshotName(self.current_commit, "src"))
 
     tasks = []
     tasks.append(CreateInstance(sid+"-instance-create", instance, required_snapshots=[previous_snap_src]))
@@ -40,7 +40,7 @@ class SyncStage(Stage):
 export PATH=$PATH:/mnt/chromium/depot_tools;
 cd /mnt/chromium/src;
 time gclient sync -r %s
-""")
+""" % self.current_commit)
     tasks.append(run_task)
 
     umount_task = UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, '/mnt/chromium')])
@@ -59,13 +59,13 @@ class BuildStage(Stage):
   def tasklets(self):
     sid = self.stage_id
 
-    current_snap_src = Snapshot(SnapshotName(self.current_commit, "src"))
-    previous_snap_out = Snapshot(SnapshotName(self.previous_commit, "out"))
+    current_snap_src = Snapshot.load(SnapshotName(self.current_commit, "src"))
+    previous_snap_out = Snapshot.load(SnapshotName(self.previous_commit, "out"))
 
-    instance = Instance("%s-instance" % sid)
-    disk_src = Disk("%s-disk-src" % sid)
-    disk_out = Disk("%s-disk-out" % sid)
-    snap_out = Snapshot(SnapshotName(self.current_commit, "src"))
+    instance = Instance.load("%s-instance" % sid)
+    disk_src = Disk.load("%s-disk-src" % sid)
+    disk_out = Disk.load("%s-disk-out" % sid)
+    snap_out = Snapshot.load(SnapshotName(self.current_commit, "src"))
 
     tasks = []
     tasks.append(CreateInstance(sid+"-instance-create", instance, required_snapshots=[current_snap_src, previous_snap_out]))
@@ -99,20 +99,58 @@ time ninja -C out/Debug;
 
 
 if __name__ == "__main__":
+  import libcloud_gae
+
+  import threading
+  import pprint
+  class Updater(threading.Thread):
+    def skip(self, obj):
+      return not obj.name.startswith(NoDash(getpass.getuser()))
+
+    def run(self):
+      driver = libcloud_gae.new_driver()
+    
+      while True:
+        nodes = driver.list_nodes()
+        volumes = driver.list_volumes()
+        snapshots = driver.ex_list_snapshots()
+
+        for node in nodes:
+          if self.skip(node):
+            continue
+          Instance.load(node.name, gce_obj=node)
+
+        for volume in volumes:
+          if self.skip(node):
+            continue
+          Disk.load(volume.name, gce_obj=volume)
+
+        for snapshot in snapshots:
+          if self.skip(node):
+            continue
+          Snapshot.load(snapshot.name, gce_obj=snapshot)
+
+        print "="*80+'\n', time.time(), "Finish updating gce\n", pprint.pformat(memcache), '\n'+"="*80+'\n'
+
+        time.sleep(1)
+
+  updater = Updater()
+  updater.start()
+
+
   previous_commit = "commit0"
   current_commit = "commit1"
 
-  import libcloud_gae
   driver = libcloud_gae.new_driver()
 
   print "SyncStage"
   print "-"*80
   for t in SyncStage(previous_commit, current_commit).tasklets():
     print t
-    print ('startable', t.is_startable(driver)), ('running', t.is_running(driver)), ('done', t.is_finished(driver))
+    print ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished())
     if isinstance(t, WaitOnOtherTasks):
       print "-->", t.task_to_run
-      print "-->", ('startable', t.task_to_run.is_startable(driver)), ('running', t.task_to_run.is_running(driver)), ('done', t.task_to_run.is_finished(driver))
+      print "-->", ('startable', t.task_to_run.is_startable()), ('running', t.task_to_run.is_running()), ('done', t.task_to_run.is_finished())
 
     print
 
@@ -122,6 +160,26 @@ if __name__ == "__main__":
   print "-"*80
   for t in BuildStage(previous_commit, current_commit).tasklets():
     print t
-    print ('startable', t.is_startable(driver)), ('running', t.is_running(driver)), ('done', t.is_finished(driver))
+    print ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished())
     print
   print "-"*80
+
+  while updater.is_alive():
+    for t in SyncStage(previous_commit, current_commit).tasklets():
+      if t.is_startable():
+        if t.is_running():
+          print time.time(), t.tid, "running"
+          continue
+
+        if t.is_finished():
+          print time.time(), t.tid, "finished"
+          continue
+
+        print time.time(), t.tid, "starting"
+        t.run(driver)
+        print time.time(), t.tid, "started"
+      else:
+        print time.time(), t.tid, "pending"
+
+    print "-" * 80
+    time.sleep(1)
