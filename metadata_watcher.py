@@ -586,9 +586,12 @@ Current project metadata:
         print "Posting data"
         output = full_data["output"]
         del full_data["output"]
+        import urllib2
+        urllib2.urlopen(self.metadata[self.CALLBACK_URL], data=full_data)
         pprint.pprint((
             self.metadata[self.CALLBACK_URL],
-            full_data))
+            full_data,
+        ))
         print "-"*80
         print output
         print "=+"*30

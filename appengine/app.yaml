@@ -18,8 +18,8 @@ handlers:
 - url: /poll_gce/.*
   script: poll_gce.APP
 
-- url: /set_metadata(/.*)?
-  script: set_metadata.APP
+- url: /callback(/.*)?
+  script: callback.APP
 
 - url: /.*
   script: printenv.APP

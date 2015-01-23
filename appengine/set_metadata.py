@@ -1,23 +1,28 @@
-import libcloud_gae
+# import libcloud_gae
 import webapp2
-import time
+
+# HACK: Using memcache as a temp DB
+from google.appengine.api import memcache
 
 
-class SetMetadataHandler(webapp2.RequestHandler):
-  # FIXME: Use post instead
+class CallbackHandler(webapp2.RequestHandler):
   def get(self):
-    instance_name = self.request.get('instance_name')
-    key = self.request.get('key')
-    value = self.request.get('value')
-    driver = libcloud_gae.new_driver()
-    node = driver.ex_get_node(instance_name)
-    driver.ex_set_node_metadata(node, {
-      'items': node.extra['metadata']['items'] + [{'key': key, 'value': value}],
-    })
+    self.response.write('Last callback: ' + memcache.get('last_callback'))
 
-    self.response.write('Added %s: %s to %s' % (key, value, instance_name))
+  def post(self):
+    memcache.set('last_callback', self.request.get('data'))
+    # instance_name = self.request.get('instance_name')
+    # key = self.request.get('key')
+    # value = self.request.get('value')
+    # driver = libcloud_gae.new_driver()
+    # node = driver.ex_get_node(instance_name)
+    # driver.ex_set_node_metadata(node, {
+    #   'items': node.extra['metadata']['items'] + [{'key': key, 'value': value}],
+    # })
+
+    # self.response.write('Added %s: %s to %s' % (key, value, instance_name))
 
 
 APP = webapp2.WSGIApplication([
-  ('/set_metadata/?', SetMetadataHandler),
+  ('/callback/?', CallbackHandler),
 ], debug=True)
