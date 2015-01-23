@@ -190,6 +190,7 @@ class MountDisksInInstance(MetadataTasklet):
 
   def __init__(self, tid, instance, disks_and_mnts):
     MetadataTasklet.__init__(self, tid, instance)
+    assert isinstance(disks_and_mnts, (list, tuple))
     self.disks_and_mnts = disks_and_mnts
 
   def _required_metadata(self, driver):
@@ -203,7 +204,6 @@ class MountDisksInInstance(MetadataTasklet):
     return data
 
   def is_startable(self, driver):
-    print self.disks_and_mnts
     for d, mnt in self.disks_and_mnts:
       if not AttachDiskToInstance(None, self.instance, d).is_finished(driver):
         return False
@@ -233,6 +233,9 @@ class RunCommandOnInstance(MetadataTasklet):
 
 
 class WaitOnOtherTasks(Tasklet):
+  def __repr_extra__(self):
+    return " %s %s" % (self.task_to_run, self.tasks_to_wait_for)
+
   def __init__(self, task_to_run, tasks_to_wait_for):
     Tasklet.__init__(self, task_to_run.tid)
     self.task_to_run = task_to_run
@@ -248,8 +251,15 @@ class WaitOnOtherTasks(Tasklet):
 
     return True
 
+  def is_running(self, driver):
+    return self.task_to_run.is_running(driver)
+
+  def is_finished(self, driver):
+    return self.task_to_run.is_finished(driver) and self.is_startable(driver)
+
   # Map everything else onto the task which should run
   def __getattr__(self, key):
     return getattr(self, self.task_to_run, key)
 
+  
 

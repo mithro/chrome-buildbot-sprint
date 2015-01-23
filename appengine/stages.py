@@ -43,7 +43,7 @@ time gclient sync -r %s
 """)
     tasks.append(run_task)
 
-    umount_task = UnmountDisksInInstance(sid+"-disk-umount", instance, disk_src)
+    umount_task = UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, '/mnt/chromium')])
     tasks.append(WaitOnOtherTasks(umount_task, [run_task]))
 
     detach_task = DetachDiskFromInstance(sid+"-disk-src-detach", instance, disk_src)
@@ -110,6 +110,10 @@ if __name__ == "__main__":
   for t in SyncStage(previous_commit, current_commit).tasklets():
     print t
     print ('startable', t.is_startable(driver)), ('running', t.is_running(driver)), ('done', t.is_finished(driver))
+    if isinstance(t, WaitOnOtherTasks):
+      print "-->", t.task_to_run
+      print "-->", ('startable', t.task_to_run.is_startable(driver)), ('running', t.task_to_run.is_running(driver)), ('done', t.task_to_run.is_finished(driver))
+
     print
 
   print "-"*80
@@ -118,4 +122,6 @@ if __name__ == "__main__":
   print "-"*80
   for t in BuildStage(previous_commit, current_commit).tasklets():
     print t
+    print ('startable', t.is_startable(driver)), ('running', t.is_running(driver)), ('done', t.is_finished(driver))
+    print
   print "-"*80
