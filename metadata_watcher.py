@@ -577,9 +577,9 @@ Current project metadata:
         data = copy.deepcopy(data)
         data["instance-name"] = socket.gethostname()
         print "Posting data to callback URL %s:" % url
-        pprint.pprint(full_data)
+        pprint.pprint(data)
         try:
-            encoded_data = urllib.urlencode({'data': simplejson.dumps(full_data)})
+            encoded_data = urllib.urlencode({'data': simplejson.dumps(data)})
             response = urllib2.urlopen(url, data=encoded_data).read()
             print 'Callback response: %s' % response
         except Exception as e:
