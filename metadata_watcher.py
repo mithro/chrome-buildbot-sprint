@@ -587,7 +587,8 @@ Current project metadata:
         output = full_data["output"]
         del full_data["output"]
         import urllib2
-        urllib2.urlopen(self.metadata[self.CALLBACK_URL], data=full_data)
+        url = self.metadata[self.CALLBACK_URL]
+        print 'Post response from %s: %s' % (url, urllib2.urlopen(url, data=full_data))
         pprint.pprint((
             self.metadata[self.CALLBACK_URL],
             full_data,
