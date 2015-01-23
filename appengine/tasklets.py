@@ -16,13 +16,13 @@ class Tasklet(object):
   def __init__(self, tid):
     self.tid = tid
 
-  def is_startable(self):
+  def is_startable(self, driver):
     raise NotImplementedError()
 
-  def is_running(self):
+  def is_running(self, driver):
     raise NotImplementedError()
 
-  def is_finished(self):
+  def is_finished(self, driver):
     raise NotImplementedError()
 
   def run(self):
@@ -44,7 +44,7 @@ class CreateXFromY(Tasklet):
   def is_running(self, driver):
     return self.dst.exists(driver)
 
-  def is_done(self, driver):
+  def is_finished(self, driver):
     return self.dst.ready(driver)
 
   def run(self, driver):
@@ -82,7 +82,7 @@ class CreateInstance(Tasklet):
   def is_running(self, driver):
     return self.instance.exists(driver)
 
-  def is_done(self, driver):
+  def is_finished(self, driver):
     return self.instance.ready(driver)
 
   def run(self, driver):
@@ -107,8 +107,8 @@ class AttachDiskToInstance(Tasklet):
   def is_running(self, driver):
     return True
 
-  def is_done(self, driver):
-    return self.instance.attached(driver, self.disk)
+  def is_finished(self, driver):
+    return self.instance.attached(self.disk, driver)
 
   def run(self, driver):
     assert self.instance.exists(driver)
@@ -129,8 +129,10 @@ class DetachDiskFromInstance(AttachDiskToInstance):
   def is_running(self, driver):
     return True
 
-  def is_done(self, driver):
-    return not self.instance.attached(driver, self.disk)
+  def is_finished(self, driver):
+    return not self.instance.attached(self.disk, driver)
+
+  # ----------------------------------------
 
   def run(self, driver):
     self.instance.detach(driver, disk)
@@ -139,6 +141,7 @@ class DetachDiskFromInstance(AttachDiskToInstance):
 
 class MetadataTasklet(Tasklet):
   METADATA_KEY=None
+  METADATA_RESULT=None
 
   def __init__(self, tid, instance):
     Tasklet.__init__(self, tid)
@@ -148,7 +151,9 @@ class MetadataTasklet(Tasklet):
     raise NotImplementedError()
 
   def is_running(self, driver):
-    metadata = self.instance.get_metadata(driver)
+    self.instance.refresh(driver)
+
+    metadata = self.instance.metadata
     if self.METADATA_KEY not in metadata:
       return False
 
@@ -157,8 +162,18 @@ class MetadataTasklet(Tasklet):
         return False
     return True
 
+  def is_finished(self, driver):
+    self.instance.refresh(driver)
+
+    metadata = self.instance.metadata
+    if self.METADATA_RESULT not in metadata:
+      return False
+    return True
+
+  # ----------------------------------------
+
   def run(self, driver):
-    metadata = self.instance.get_metadata(driver)
+    metadata = self.instance.metadata
     if self.METADATA_KEY not in metadata:
       metadata[self.METADATA_KEY] = []
 
@@ -188,11 +203,14 @@ class MountDisksInInstance(MetadataTasklet):
     return data
 
   def is_startable(self, driver):
-    check = AttachDiskToInstance(None, instance, [disk for disk, mnt in self.disks_and_mnt])
-    return check.is_done(driver)
+    print self.disks_and_mnts
+    for d, mnt in self.disks_and_mnts:
+      if not AttachDiskToInstance(None, self.instance, d).is_finished(driver):
+        return False
+    return True
 
-  def is_done(self, driver):
-    return self.instance.fetch("mount") is not None
+  def is_finished(self, driver):
+    return self.instance.fetch(driver, "mount") is not None
 
 
 class UnmountDisksInInstance(MountDisksInInstance):
@@ -211,7 +229,7 @@ class RunCommandOnInstance(MetadataTasklet):
     return [self.command]
 
   def is_startable(self, driver):
-    return self.mount_task.is_done(driver)
+    return self.instance.ready(driver)
 
 
 class WaitOnOtherTasks(Tasklet):
@@ -225,7 +243,7 @@ class WaitOnOtherTasks(Tasklet):
       return False
 
     for task in self.tasks_to_wait_for:
-      if not task.is_done(driver):
+      if not task.is_finished(driver):
         return False
 
     return True

@@ -102,10 +102,16 @@ if __name__ == "__main__":
   previous_commit = "commit0"
   current_commit = "commit1"
 
+  import libcloud_gae
+  driver = libcloud_gae.new_driver()
+
   print "SyncStage"
   print "-"*80
   for t in SyncStage(previous_commit, current_commit).tasklets():
     print t
+    print ('startable', t.is_startable(driver)), ('running', t.is_running(driver)), ('done', t.is_finished(driver))
+    print
+
   print "-"*80
   print
   print "BuildStage"
