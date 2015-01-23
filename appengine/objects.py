@@ -65,7 +65,7 @@ class GCEObject(dict):
     self.name = gce_obj.name
     self.create_time = self._create_time(gce_obj)
     self.status = self._status(gce_obj)
-    memcache.set(self._cache_key(), self)
+    memcache.set(self._cache_key(), self, time=120)
 
   def load(self, name, driver):
     cached = memcache.get(self._cache_key())
