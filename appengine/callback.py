@@ -4,6 +4,8 @@ import json
 
 from google.appengine.ext import ndb
 
+from objects import Instance
+
 class LastCallback(ndb.Model):
   data = ndb.JsonProperty(required=True)
 
@@ -24,12 +26,10 @@ class CallbackHandler(webapp2.RequestHandler):
       return
     flag = data['set-flag']
     driver = libcloud_gae.new_driver()
-    node = driver.ex_get_node(data['instance-name'])
-    new_metadata = {}
-    for item in node.extra['metadata']['items']:
-      new_metadata[item['key']] = item['value']
-    new_metadata[flag] = 'true'
-    driver.ex_set_node_metadata(node, new_metadata)
+    instance = Instance.load(data['instance-name'], driver=driver)
+    instance.set_metadata({
+      'flags.%s' % flag: 'true'
+    })
     self.response.write('Set metadata flag: %s' % flag)
 
 APP = webapp2.WSGIApplication([
