@@ -4,6 +4,7 @@
 # vim: set ts=2 sw=2 et sts=2 ai:
 
 
+from tasklet_time_log import TaskletTimeLog
 from objects import *
 
 class Tasklet(object):
@@ -13,7 +14,8 @@ class Tasklet(object):
   def __repr_extra__(self):
     return ''
 
-  def __init__(self, tid):
+  def __init__(self, stage, tid):
+    self.stage = stage
     self.tid = tid
 
   def is_startable(self, driver):
@@ -25,7 +27,11 @@ class Tasklet(object):
   def is_finished(self, driver):
     raise NotImplementedError()
 
-  def run(self):
+  def timed_run(self, driver):
+    TaskletTimeLog.start(self)
+    self._run(driver)
+
+  def _run(self, driver):
     raise NotImplementedError()
 
 
@@ -33,8 +39,8 @@ class CreateXFromY(Tasklet):
   def __repr_extra__(self):
     return ' src=%s dst=%s' % (self.src, self.dst)
 
-  def __init__(self, tid, src, dst):
-    Tasklet.__init__(self, tid)
+  def __init__(self, stage, tid, src, dst):
+    Tasklet.__init__(self, stage, tid)
     self.src = src
     self.dst = dst
 
@@ -47,29 +53,29 @@ class CreateXFromY(Tasklet):
   def is_finished(self, driver):
     return self.dst.ready(driver)
 
-  def run(self, driver):
+  def _run(self, driver):
     assert self.src.exists(driver)
     assert not self.dst.exists(driver)
     self.dst.create(driver, self.src.name)
 
 
 class CreateDiskFromSnapshot(CreateXFromY):
-  def __init__(self, tid, source_snapshot, destination_disk):
+  def __init__(self, stage, tid, source_snapshot, destination_disk):
     assert isinstance(source_snapshot, Snapshot)
     assert isinstance(destination_disk, Disk)
-    CreateXFromY.__init__(self, tid, src=source_snapshot, dst=destination_disk)
+    CreateXFromY.__init__(self, stage, tid, src=source_snapshot, dst=destination_disk)
 
 
 class CreateSnapshotFromDisk(CreateXFromY):
-  def __init__(self, tid, source_disk, destination_snapshot):
+  def __init__(self, stage, tid, source_disk, destination_snapshot):
     assert isinstance(source_disk, Disk)
     assert isinstance(destination_snapshot, Snapshot)
-    CreateXFromY.__init__(self, tid, src=source_disk, dst=destination_snapshot)
+    CreateXFromY.__init__(self, stage, tid, src=source_disk, dst=destination_snapshot)
 
 
 class CreateInstance(Tasklet):
-  def __init__(self, tid, instance, required_snapshots):
-    Tasklet.__init__(self, tid)
+  def __init__(self, stage, tid, instance, required_snapshots):
+    Tasklet.__init__(self, stage, tid)
     self.instance = instance
     self.required_snapshots = required_snapshots
 
@@ -85,13 +91,13 @@ class CreateInstance(Tasklet):
   def is_finished(self, driver):
     return self.instance.ready(driver)
 
-  def run(self, driver):
+  def _run(self, driver):
     self.instance.create(driver)
 
 
 class AttachDiskToInstance(Tasklet):
-  def __init__(self, tid, instance, disk):
-    Tasklet.__init__(self, tid)
+  def __init__(self, stage, tid, instance, disk):
+    Tasklet.__init__(self, stage, tid)
     self.instance = instance
     self.disk = disk
 
@@ -110,7 +116,7 @@ class AttachDiskToInstance(Tasklet):
   def is_finished(self, driver):
     return self.instance.attached(self.disk, driver)
 
-  def run(self, driver):
+  def _run(self, driver):
     assert self.instance.exists(driver)
     assert self.disk.exists(driver)
     self.instance.attach(driver, disk)
@@ -134,7 +140,7 @@ class DetachDiskFromInstance(AttachDiskToInstance):
 
   # ----------------------------------------
 
-  def run(self, driver):
+  def _run(self, driver):
     self.instance.detach(driver, disk)
 
       
@@ -143,8 +149,8 @@ class MetadataTasklet(Tasklet):
   METADATA_KEY=None
   METADATA_RESULT=None
 
-  def __init__(self, tid, instance):
-    Tasklet.__init__(self, tid)
+  def __init__(self, stage, tid, instance):
+    Tasklet.__init__(self, stage, tid)
     self.instance = instance
 
   def _required_metadata(self, driver):
@@ -172,7 +178,7 @@ class MetadataTasklet(Tasklet):
 
   # ----------------------------------------
 
-  def run(self, driver):
+  def _run(self, driver):
     metadata = self.instance.metadata
     if self.METADATA_KEY not in metadata:
       metadata[self.METADATA_KEY] = []
@@ -188,8 +194,8 @@ class MetadataTasklet(Tasklet):
 class MountDisksInInstance(MetadataTasklet):
   METADATA_KEY='mount'
 
-  def __init__(self, tid, instance, disks_and_mnts):
-    MetadataTasklet.__init__(self, tid, instance)
+  def __init__(self, stage, tid, instance, disks_and_mnts):
+    MetadataTasklet.__init__(self, stage, tid, instance)
     self.disks_and_mnts = disks_and_mnts
 
   def _required_metadata(self, driver):
@@ -221,8 +227,8 @@ class UnmountDisksInInstance(MountDisksInInstance):
 class RunCommandOnInstance(MetadataTasklet):
   METADATA_KEY='long-commands'
 
-  def __init__(self, tid, instance, command):
-    MetadataTasklet.__init__(self, tid, instance)
+  def __init__(self, stage, tid, instance, command):
+    MetadataTasklet.__init__(self, stage, tid, instance)
     self.command = command
     
   def _required_metadata(self, driver):
@@ -234,7 +240,7 @@ class RunCommandOnInstance(MetadataTasklet):
 
 class WaitOnOtherTasks(Tasklet):
   def __init__(self, task_to_run, tasks_to_wait_for):
-    Tasklet.__init__(self, task_to_run.tid)
+    Tasklet.__init__(self, task_to_run.stage, task_to_run.tid)
     self.task_to_run = task_to_run
     self.tasks_to_wait_for = tasks_to_wait_for
 
