@@ -95,8 +95,11 @@ class GCEObject(dict):
     if gce_obj:
       obj.update_from_gce(gce_obj)
 
-    memcache.set(obj._cache_key(), obj, time=120)
+    obj.store()
     return obj
+
+  def store(self):
+    memcache.set(self._cache_key(), self, time=120)
 
   def __init__(self, name, sentinal=None):
     assert sentinal is self._sentinal
@@ -266,11 +269,11 @@ class Instance(GCEObject):
     assert isinstance(disk, Disk)
     assert disk.exists()
     assert disk.ready()
-    assert disk in self.disks(driver)
+    assert disk in self.disks
 
     driver.detach_volume(
-      volume=disk._gce_obj_get(driver, self.name),
-      ex_node=self._gce_obj_get(driver, disk.name))
+      volume=disk._gce_obj_get(driver, disk.name),
+      ex_node=self._gce_obj_get(driver, self.name))
 
   def set_metadata(self, driver, data={}, **kw):
     metadata = copy.deepcopy(self.metadata)
@@ -285,4 +288,5 @@ class Instance(GCEObject):
       else:
         raise TypeError("Can't set metadata key %s to %r" % (key, v))
     driver.ex_set_node_metadata(self._gce_obj_get(driver, self.name), metadata)
-
+    self.metadata = metadata
+    self.store()

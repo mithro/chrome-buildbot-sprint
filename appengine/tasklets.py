@@ -39,7 +39,7 @@ class CreateXFromY(Tasklet):
     self.dst = dst
 
   def is_startable(self):
-    return self.src.exists()
+    return self.src.exists() and self.src.ready()
 
   def is_running(self):
     return self.dst.exists() and not self.is_finished()
@@ -130,7 +130,7 @@ class DetachDiskFromInstance(AttachDiskToInstance):
   # ----------------------------------------
 
   def run(self, driver):
-    self.instance.detach(driver, disk)
+    self.instance.detach(driver, self.disk)
 
       
 
@@ -143,7 +143,7 @@ class MetadataTasklet(Tasklet):
     self.instance = instance
 
   def _metadata_values(self):
-    raise NotImplementedError()
+    raise NotImplementedError("%s._metadata_values()" % self.__class__)
 
   def is_running(self):
     metadata = self.instance.metadata
@@ -168,9 +168,10 @@ class MetadataTasklet(Tasklet):
     return True
 
   @classmethod
-  def handle_callback(cls, instance, success, old_value, new_value):
-    assert old_value is None
-    if not success:
+  def handle_callback(cls, driver, instance, success, old_value, new_value):
+    if success is not True:
+      return
+    if new_value is None:
       return
 
     metadata = instance.metadata
@@ -241,8 +242,8 @@ class RunCommandOnInstance(MetadataTasklet):
     MetadataTasklet.__init__(self, tid, instance)
     self.command = command
     
-  def _required_metadata(self):
-    return [self.command]
+  def _metadata_values(self):
+    return [{'cmd': self.command, 'user': 'ubuntu'}]
 
   def is_startable(self):
     return self.instance.ready()

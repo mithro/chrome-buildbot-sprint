@@ -12,7 +12,7 @@ from helpers import *
 class Stage(object):
   @property
   def stage_id(self):
-    return '-'.join([NoDash(getpass.getuser()), self.current_commit, "linux", self.__class__.__name__.lower().replace('stage', '')])
+    return '-'.join([NoDash(getpass.getuser()), 'new', self.current_commit, "linux", self.__class__.__name__.lower().replace('stage', '')])
 
   def __init__(self, previous_commit, current_commit):
     self.current_commit = current_commit
@@ -38,12 +38,14 @@ class SyncStage(Stage):
     mount_task = MountDisksInInstance(sid+"-disk-mount", instance, [(disk_src, "/mnt/chromium")])
     tasks.append(mount_task)
 
-    run_task = RunCommandOnInstance(sid+"-run", instance, """\
-export PATH=$PATH:/mnt/chromium/depot_tools;
-cd /mnt/chromium/src;
+    run_task = WaitOnOtherTasks(
+        RunCommandOnInstance(sid+"-run", instance, ";".join(("""\
+export PATH=$PATH:/mnt/chromium/depot_tools
+cd /mnt/chromium/src
 time gclient sync -r %s
-""" % self.current_commit)
-    tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
+""" % self.current_commit).split('\n'))),
+        [mount_task])
+    tasks.append(run_task)
 
     umount_task = WaitOnOtherTasks(
         UnmountDisksInInstance(sid+"-disk-umount", instance, [(disk_src, '/mnt/chromium')]),
@@ -117,9 +119,12 @@ time ninja -C out/Debug;
 
 
 if __name__ == "__main__":
+  previous_commit = "fa1651193bf94120"
+  current_commit = "32cbfaa6478f66b9"
+
   import libcloud_gae
   driver = libcloud_gae.new_driver()
-  starting_snap = Snapshot.load(SnapshotName("commit0", "src"), driver=driver)
+  starting_snap = Snapshot.load(SnapshotName(previous_commit, "src"), driver=driver)
   assert starting_snap.exists(), starting_snap.name
 
   import threading
@@ -130,7 +135,7 @@ if __name__ == "__main__":
     go = True
 
     def skip(self, obj):
-      return not obj.name.startswith(NoDash(getpass.getuser()) + '-commit')
+      return not obj.name.startswith(NoDash(getpass.getuser()) + '-new-')
 
     def run(self):
       driver = libcloud_gae.new_driver()
@@ -165,9 +170,6 @@ if __name__ == "__main__":
   updater.start()
   while not updater.ready and updater.is_alive():
     time.sleep(1)
-
-  previous_commit = "commit0"
-  current_commit = "commit1"
 
   print "SyncStage"
   print "-"*80
@@ -213,11 +215,15 @@ if __name__ == "__main__":
           updater.output = False
           raw_input("run?")
           updater.output = True
-          t.run(driver)
+          def run(t=t):
+            driver = libcloud_gae.new_driver()
+            t.run(driver)
+          threading.Thread(target=run).start()
         else:
           print "pending"
 
       print "-" * 80
+      time.sleep(1)
   finally:
     updater.go = False
     updater.join()

@@ -31,6 +31,9 @@ class CallbackHandler(webapp2.RequestHandler):
 
   def post(self):
     data = json.loads(self.request.get('data'))
+    if data.get('type') != 'finished':
+      self.response.write('IGNORED')
+      return
     last_callback = LastCallback.query().get()
     last_callback.data = data
     last_callback.put()
@@ -38,7 +41,7 @@ class CallbackHandler(webapp2.RequestHandler):
     instance = Instance.load(data['instance-name'], driver=driver)
     tasklet_type = TASKLET_TYPES.get(data['handler'])
     if tasklet_type:
-      tasklet_type.handle_callback(instance, data['success'], data['old-value'], data['new-value'])
+      tasklet_type.handle_callback(driver, instance, data['success'], data['old-value'], data['new-value'])
       self.response.write('OK')
     else:
       self.response.write('MAYBE OK')
