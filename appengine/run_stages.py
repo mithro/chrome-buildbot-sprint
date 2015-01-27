@@ -17,7 +17,7 @@ PRINT_LOCK = threading.RLock()
 import sys
 mainThread = threading.currentThread()
 def info(type, value, tb):
-  if hasattr(sys, 'ps1') or not sys.stderr.isatty() or threading.currentThread() != mainThread():
+  if hasattr(sys, 'ps1') or not sys.stderr.isatty() or threading.currentThread() != mainThread:
     # we are in interactive mode or we don't have a tty-like
     # device, so we call the default hook
     with PRINT_LOCK:
@@ -42,10 +42,10 @@ from stages import *
 PADDING=60
 END=' | '
 def pretty_print_status(t, skip_tid=False):
-  tid = t.tid
-  if skip_tid:
-    tid = '--->'
+  if (isinstance(t, WaitOnOtherTasks)):
+    pretty_print_status(t.task_to_run, skip_tid='/-> ')
 
+  tid = t.tid
   if not skip_tid:
     padding = ' '*(PADDING - len(tid))
     print(padding, end='')
@@ -56,7 +56,7 @@ def pretty_print_status(t, skip_tid=False):
     print('   ', end=END)
   else:
     print(' '*PADDING, end='')
-    print('\-> ', end=END)
+    print(skip_tid, end=END)
 
   if t.is_startable():
     print_color("startable(true) ", color='green', end=END)
@@ -74,9 +74,9 @@ def pretty_print_status(t, skip_tid=False):
     print("finished(false)", end=END)
 
   print()
-  if isinstance(t, WaitOnOtherTasks):
-    pretty_print_status(t.task_to_run, skip_tid=True)
-  else:
+  if isinstance(t, CancelledByOtherTask):
+    pretty_print_status(t.task_to_run, skip_tid='\-> ')
+  if not skip_tid:
     print()
 
 previous_commit = "fa1651193bf94120"
@@ -98,6 +98,9 @@ class Updater(threading.Thread):
     return not obj.name.startswith(NoDash(getpass.getuser()) + '-new-')
 
   def run(self):
+    if sys.excepthook != info:
+      sys.excepthook = info
+
     driver = libcloud_gae.new_driver()
   
     old_nodes = []
@@ -177,6 +180,9 @@ try:
           raw_input("run (%s)? " % t.tid)
           updater.output = True
           def run(t=t):
+            if sys.excepthook != info:
+              sys.excepthook = info
+
             driver = libcloud_gae.new_driver()
             t.run(driver)
           threading.Thread(target=run).start()

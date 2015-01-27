@@ -11,7 +11,7 @@ def NoDash(string):
   return string.replace('-', '_')
 
 def SnapshotName(commit, content):
-  return '-'.join([NoDash(getpass.getuser()), 'snapshot-new', 'linux', NoDash(commit), content])
+  return '-'.join([NoDash(getpass.getuser()), 'new', 'linux', NoDash(commit), 'snapshot', content])
 
 import sys
 sys.path.append("third_party/python-dateutil-1.5")

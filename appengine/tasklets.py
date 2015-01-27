@@ -221,7 +221,7 @@ class MountDisksInInstance(MetadataTasklet):
 
   def is_startable(self):
     for d, mnt in self.disks_and_mnts:
-      if not AttachDiskToInstance(None, self.instance, d, None).is_finished():
+      if not self.instance.attached(d):
         return False
     return True
 
@@ -272,7 +272,14 @@ class WaitOnOtherTasks(Tasklet):
     return self.task_to_run.is_running()
 
   def is_finished(self):
-    return self.task_to_run.is_finished() and self.is_startable()
+    if not self.task_to_run.is_finished():
+      return False
+
+    for task in self.tasks_to_wait_for:
+      if not task.is_finished():
+        return False
+
+    return True
 
   def run(self, driver):
     return self.task_to_run.run(driver)

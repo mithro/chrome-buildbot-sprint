@@ -212,8 +212,8 @@ class Instance(GCEObject):
     if self.status != "RUNNING":
       return False
 
-    if not self.fetch():
-      return False
+    #if not self.fetch():
+    #  return False
 
     return True
 
