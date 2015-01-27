@@ -60,9 +60,11 @@ class SyncStage(Stage):
     tasks = []
     tasks.append(CreateInstance(sid+"-instance-create", instance, required_snapshots=[previous_snap_src]))
     tasks.append(CreateDiskFromSnapshot(sid+"-disk-src-create", previous_snap_src, disk_src))
-    tasks.append(AttachDiskToInstance(sid+"-disk-src-attach", instance, disk_src, 'READ_WRITE'))
-
     mount_task = MountDisksInInstance(sid+"-disk-mount", instance, [(disk_src, "/mnt/chromium")])
+    attach_task = CancelledByOtherTask(
+        AttachDiskToInstance(sid+"-disk-src-attach", instance, disk_src, 'READ_WRITE'),
+        mount_task)
+    tasks.append(attach_task)
     tasks.append(mount_task)
 
     run_task = WaitOnOtherTasks(
