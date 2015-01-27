@@ -24,6 +24,9 @@ handlers:
 - url: /stage(/.*)
   script: stage_status.APP
 
+- url: /run_stages/?
+  script: run_stages.APP
+
 - url: /.*
   script: printenv.APP
 

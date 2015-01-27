@@ -58,11 +58,11 @@ class ScheduleHandler(webapp2.RequestHandler):
   def get(self):
     start = time.time()
 
-    # Cron schedules us once per minute, so issue 6 tasks to get one per 10s.
-    for c in xrange(0, 60, 10):
+    for c in xrange(0, 60000, 30):
         taskqueue.add(url='/poll_gce/do',
                       method='GET',
-                      countdown=c)
+                      countdown=c,
+                      queue_name='poll')
 
     result = PAGE_TEMPLATE.format(
         'poll_gce/schedule',
@@ -86,6 +86,7 @@ class PollGceHandler(webapp2.RequestHandler):
     disk_names = [d.name for d in volumes]
     snapshot_names = [s.name for s in snapshots]
 
+    memcache.flush_all()
     memcache.set_multi({"gce_instances": instance_names,
                         "gce_disks": disk_names,
                         "gce_snapshots": snapshot_names },

@@ -22,7 +22,7 @@ import pprint
 TEMPLATE_ENV.filters['pprint'] = pprint.pformat
 
 TEMPLATE_STAGE = TEMPLATE_ENV.from_string(
-    open(os.path.join(os.path.dirname(__file__), 'stage.html')).read())
+    open(os.path.join(os.path.dirname(__file__), 'stage-status.html')).read())
 
 def get_exception():
     import traceback
@@ -48,8 +48,8 @@ class MainHandler(webapp2.RequestHandler):
                 try:
                    t.run(driver)
                 except Exception, e:
-                   error.append(str(e))
-                   error.append(get_exception())
+                   errors.append(str(e))
+                   errors.append(get_exception())
 
         self.response.out.write(TEMPLATE_STAGE.render(
             stage=stage,

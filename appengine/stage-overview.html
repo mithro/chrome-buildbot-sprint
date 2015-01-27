@@ -1,0 +1,40 @@
+{#
+-*- coding: utf-8 -*-
+vim: set ts=4 sw=4 et sts=4 ai syn=htmldjango:
+#}
+<!DOCTYPE html>
+<head>
+  <meta http-equiv="refresh" content="5">
+</head>
+<style>
+iframe {
+  width: 700px;
+  height: 400px;
+}
+.running-tasks {
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+</style>
+<body>
+  <ul>
+    {% for stage in stages %}
+      <li>
+        <a href="{{ stage.url }}">
+        <iframe src="{{ stage.url }}"></iframe>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+  <div class="running-tasks">
+    Tasklets just started:
+    <ul>
+      {% for stage in stages %}
+        {% for tasklet in stage.tasklets() if tasklet.can_run() %}
+          <li>{{ tasklet.tid }}</li>
+        {% endfor %}
+      {% endfor %}
+    </ul>
+  </div>
+</body>

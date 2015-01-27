@@ -41,12 +41,10 @@ pre {
             <td {% if task.is_startable() %}style='background-color: green;'{%endif%}>
                 {% if task.can_run() %}
                     <a href="?go={{task.tid}}">GO!</a>
-                {% else %}
-                    X
                 {% endif %}
             </td>
-            <td {% if task.is_running() %}style='background-color: red;'{%endif%}>X</td>
-            <td {% if task.is_finished() %}style='background-color: blue;'{%endif%}>X</td>
+            <td {% if task.is_running() %}style='background-color: red;'{%endif%}></td>
+            <td {% if task.is_finished() %}style='background-color: blue;'{%endif%}></td>
         </tr>
         {% endfor %}
     </table>        

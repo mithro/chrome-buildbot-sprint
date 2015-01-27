@@ -1,0 +1,8 @@
+total_storage_limit: 120M
+queue:
+- name: poll
+  rate: 1/s
+- name: run
+  rate: 1/s
+- name: default
+  rate: 1/s
