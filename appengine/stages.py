@@ -3,10 +3,37 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
+from __future__ import print_function
+
 import getpass
+try:
+  from termcolor import cprint as print_color
+except ImportError:
+  def print_color(*args, **kw):
+    print(*args, **kw)
 
 from tasklets import *
 from helpers import *
+
+import sys
+def info(type, value, tb):
+  from libcloud.common.google import ResourceInUseError
+  if hasattr(sys, 'ps1') or not sys.stderr.isatty() or isinstance(type, ResourceInUseError):
+    # we are in interactive mode or we don't have a tty-like
+    # device, so we call the default hook
+    sys.__excepthook__(type, value, tb)
+  else:
+    import traceback, pdb
+    # we are NOT in interactive mode, print the exception...
+    traceback.print_exception(type, value, tb)
+    print
+    # ...then start the debugger in post-mortem mode.
+    pdb.pm()
+
+sys.excepthook = info
+
+
+
 
 
 class Stage(object):
@@ -140,6 +167,9 @@ if __name__ == "__main__":
     def run(self):
       driver = libcloud_gae.new_driver()
     
+      old_nodes = []
+      old_volumes = []
+      old_snapshots = []
       while self.go:
         nodes = driver.list_nodes()
         volumes = driver.list_volumes()
@@ -162,23 +192,25 @@ if __name__ == "__main__":
 
         self.ready = True
         if self.output:
-          print "="*80+'\n', time.time(), "Finish updating gce\n", pprint.pformat(memcache), '\n'+"="*80+'\n'
-
-        time.sleep(1)
+          if old_nodes != nodes or old_volumes != volumes or old_snapshots != snapshots:
+            print("="*80+'\n', time.time(), "Finish updating gce\n", pprint.pformat(memcache), '\n'+"="*80+'\n')
+          old_nodes = nodes
+          old_volumes = volumes
+          old_snapshots = snapshots
 
   updater = Updater()
   updater.start()
   while not updater.ready and updater.is_alive():
     time.sleep(1)
 
-  print "SyncStage"
-  print "-"*80
+  print("SyncStage")
+  print("-"*80)
   for t in SyncStage(previous_commit, current_commit).tasklets():
-    print t
-    print ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished())
+    print(t)
+    print(('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished()))
     if isinstance(t, WaitOnOtherTasks):
-      print "-->", t.task_to_run
-      print "-->", ('startable', t.task_to_run.is_startable()), ('running', t.task_to_run.is_running()), ('done', t.task_to_run.is_finished())
+      print("-->", t.task_to_run)
+      print("-->", ('startable', t.task_to_run.is_startable()), ('running', t.task_to_run.is_running()), ('done', t.task_to_run.is_finished()))
     print
 
 
@@ -188,30 +220,30 @@ if __name__ == "__main__":
     updater.output = True
 
     """
-    print "-"*80
+    print("-"*80)
     print
-    print "BuildStage"
-    print "-"*80
+    print("BuildStage")
+    print("-"*80)
     for t in BuildStage(previous_commit, current_commit).tasklets():
-      print t
-      print ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished())
+      print(t)
+      print(('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished()))
       print
-    print "-"*80
+    print("-"*80)
     """
 
     while updater.is_alive():
       for t in SyncStage(previous_commit, current_commit).tasklets():
-        print time.time(), t.tid, ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished()),
+        print(time.time(), t.tid, ('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished()), end=' ')
         if t.is_startable():
           if t.is_running():
-            print "running"
+            print("running")
             continue
 
           if t.is_finished():
-            print "finished"
+            print("finished")
             continue
 
-          print "starting"
+          print_color("starting", color='green')
           updater.output = False
           raw_input("run?")
           updater.output = True
@@ -220,9 +252,9 @@ if __name__ == "__main__":
             t.run(driver)
           threading.Thread(target=run).start()
         else:
-          print "pending"
+          print("pending")
 
-      print "-" * 80
+      print("-" * 80)
       time.sleep(1)
   finally:
     updater.go = False
