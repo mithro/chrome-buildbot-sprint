@@ -170,19 +170,20 @@ class MetadataTasklet(Tasklet):
   @classmethod
   def handle_callback(cls, driver, instance, success, old_value, new_value):
     if success is not True:
-      return
+      return False
     if new_value is None:
-      return
+      return False
 
     metadata = instance.metadata
     if cls.METADATA_RESULT not in metadata:
       metadata[cls.METADATA_RESULT] = []
 
     if new_value in metadata[cls.METADATA_RESULT]:
-      return
+      return False
 
     metadata[cls.METADATA_RESULT].append(new_value)
     instance.set_metadata(driver, {cls.METADATA_RESULT: metadata[cls.METADATA_RESULT]})
+    return True
 
   # ----------------------------------------
 
