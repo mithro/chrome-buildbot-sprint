@@ -161,7 +161,8 @@ try:
     for t in SyncStage(previous_commit, current_commit).tasklets():
       pretty_print_status(t)
 
-    raw_input("okay? ")
+    if raw_input("okay? [y] ") not in ('y', ''):
+      raise Exception("User aborted")
 
   """
   print("-"*80)
@@ -187,9 +188,9 @@ try:
           if t.is_finished():
             continue
 
-          updater.output = False
-          raw_input("run (%s)? " % t.tid)
-          updater.output = True
+          if raw_input("run (%s)? [n] " % t.tid) != 'y':
+            continue
+
           def run(t=t):
             driver = libcloud_gae.new_driver()
             t.run(driver)
