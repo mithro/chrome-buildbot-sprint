@@ -3,6 +3,6 @@ queue:
 - name: poll
   rate: 1/s
 - name: run
-  rate: 1/s
+  rate: 1000/s
 - name: default
   rate: 1/s
