@@ -14,7 +14,7 @@ from helpers import *
 class Stage(object):
   @property
   def stage_id(self):
-    return '-'.join([NoDash(getpass.getuser()), 'new', self.current_commit, "linux", self.__class__.__name__.lower().replace('stage', '')])
+    return '-'.join([Namespace(), 'new', self.current_commit, "linux", self.__class__.__name__.lower().replace('stage', '')])
 
   def __init__(self, previous_commit, current_commit):
     self.current_commit = current_commit

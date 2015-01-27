@@ -109,7 +109,7 @@ class Updater(threading.Thread):
   go = True
 
   def skip(self, obj):
-    return not obj.name.startswith(NoDash(getpass.getuser()) + '-new-')
+    return not obj.name.startswith(Namespace())
 
   def run(self):
     driver = libcloud_gae.new_driver()
