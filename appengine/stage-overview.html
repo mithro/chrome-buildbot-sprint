@@ -28,12 +28,10 @@ iframe {
     {% endfor %}
   </ul>
   <div class="running-tasks">
-    Tasklets just started:
+    Things Started:
     <ul>
-      {% for stage in stages %}
-        {% for tasklet in stage.tasklets() if tasklet.can_run() %}
-          <li>{{ tasklet.tid }}</li>
-        {% endfor %}
+      {% for t in things_started %}
+        <li>{{ t }}</li>
       {% endfor %}
     </ul>
   </div>

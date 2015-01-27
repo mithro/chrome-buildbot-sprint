@@ -31,8 +31,9 @@ class Stage(object):
     return self._objects
 
   def is_finished(self):
-    for t in self.tasklets():
-      if not t.is_finished():
+    self.tasklets()
+    for o in self.outputs():
+      if not o.exists():
         return False
     return True
 
