@@ -1,4 +1,5 @@
 import libcloud_gae
+import logging
 import webapp2
 import json
 
@@ -38,13 +39,20 @@ class CallbackHandler(webapp2.RequestHandler):
     last_callback.data = data
     last_callback.put()
     driver = libcloud_gae.new_driver()
-    instance = Instance.load(data['instance-name'], driver=driver)
-    tasklet_type = TASKLET_TYPES.get(data['handler'])
+    instance_name = data['instance-name']
+    instance = Instance.load(instance_name, driver=driver)
+    handler = data['handler']
+    tasklet_type = TASKLET_TYPES.get(handler)
     if tasklet_type:
       tasklet_type.handle_callback(driver, instance, data['success'], data['old-value'], data['new-value'])
-      self.response.write('OK')
+      result = 'OK'
+      logging.info(result)
     else:
-      self.response.write('MAYBE OK')
+      result = 'MAYBE OK'
+      logging.warn(result)
+      logging.warn(instance_name)
+      logging.warn(handler)
+    self.response.write(result)
 
 
 APP = webapp2.WSGIApplication([

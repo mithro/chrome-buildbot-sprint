@@ -276,5 +276,22 @@ class WaitOnOtherTasks(Tasklet):
 
   def run(self, driver):
     return self.task_to_run.run(driver)
-  
+
+class CancelledByOtherTask(Tasklet):
+  def __init__(self, task_to_run, task_indicating_finished):
+    Tasklet.__init__(self, task_to_run.tid)
+    self.task_to_run = task_to_run
+    self.task_indicating_finished = task_indicating_finished
+
+  def is_startable(self):
+    return self.task_to_run.is_startable()
+
+  def is_running(self):
+    return self.task_to_run.is_running()
+
+  def is_finished(self):
+    return self.task_to_run.is_finished() or self.task_indicating_finished.is_finished()
+
+  def run(self, driver):
+    return self.task_to_run.run(driver)
 
