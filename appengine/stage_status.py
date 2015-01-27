@@ -52,6 +52,7 @@ class MainHandler(webapp2.RequestHandler):
                    errors.append(get_exception())
 
         self.response.out.write(TEMPLATE_STAGE.render(
+            errors=errors,
             stage=stage,
             previous_commit=previous_commit,
             current_commit=current_commit)
