@@ -287,6 +287,9 @@ class Instance(GCEObject):
         metadata[key] = simplejson.dumps(metadata[key])
       else:
         raise TypeError("Can't set metadata key %s to %r" % (key, v))
-    driver.ex_set_node_metadata(self._gce_obj_get(driver, self.name), metadata)
-    self.metadata = metadata
+    while not driver.ex_set_node_metadata(self._gce_obj_get(driver, self.name), metadata):
+      time.sleep(1)
+
+    gce_obj = self._gce_obj_get(driver, self.name)
+    self.update_from_gce(gce_obj)
     self.store()
