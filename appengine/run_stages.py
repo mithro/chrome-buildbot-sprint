@@ -15,9 +15,9 @@ import threading
 PRINT_LOCK = threading.RLock()
 
 import sys
+mainThread = threading.currentThread()
 def info(type, value, tb):
-  from libcloud.common.google import ResourceInUseError
-  if hasattr(sys, 'ps1') or not sys.stderr.isatty() or isinstance(type, ResourceInUseError):
+  if hasattr(sys, 'ps1') or not sys.stderr.isatty() or threading.currentThread() != mainThread():
     # we are in interactive mode or we don't have a tty-like
     # device, so we call the default hook
     with PRINT_LOCK:
