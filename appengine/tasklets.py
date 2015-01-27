@@ -178,9 +178,10 @@ class MetadataTasklet(Tasklet):
     if cls.METADATA_RESULT not in metadata:
       metadata[cls.METADATA_RESULT] = []
 
-    if new_value not in metadata[cls.METADATA_RESULT]:
-      metadata[cls.METADATA_RESULT].append(new_value)
+    if new_value in metadata[cls.METADATA_RESULT]:
+      return
 
+    metadata[cls.METADATA_RESULT].append(new_value)
     instance.set_metadata(driver, {cls.METADATA_RESULT: metadata[cls.METADATA_RESULT]})
 
   # ----------------------------------------
