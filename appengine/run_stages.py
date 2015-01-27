@@ -35,6 +35,20 @@ def info(type, value, tb):
 
 sys.excepthook = info
 
+init_old = threading.Thread.__init__
+def init(self, *args, **kwargs):
+    init_old(self, *args, **kwargs)
+    run_old = self.run
+    def run_with_except_hook(*args, **kw):
+        try:
+            run_old(*args, **kw)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            sys.excepthook(*sys.exc_info())
+    self.run = run_with_except_hook
+threading.Thread.__init__ = init
+
 
 from stages import *
 
@@ -98,9 +112,6 @@ class Updater(threading.Thread):
     return not obj.name.startswith(NoDash(getpass.getuser()) + '-new-')
 
   def run(self):
-    if sys.excepthook != info:
-      sys.excepthook = info
-
     driver = libcloud_gae.new_driver()
   
     old_nodes = []
@@ -180,9 +191,6 @@ try:
           raw_input("run (%s)? " % t.tid)
           updater.output = True
           def run(t=t):
-            if sys.excepthook != info:
-              sys.excepthook = info
-
             driver = libcloud_gae.new_driver()
             t.run(driver)
           threading.Thread(target=run).start()
