@@ -3,6 +3,8 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
+import os
+
 inf = float("inf")
 
 import getpass
@@ -11,7 +13,13 @@ def NoDash(string):
   return string.replace('-', '')
 
 def Namespace():
-  return NoDash(os.environ['CURRENT_VERSION_ID'] or getpass.getuser())
+  vid = os.environ.get('CURRENT_VERSION_ID', None)
+  if vid:
+    if not os.environ['APPLICATION_ID'].startswith('dev'):
+      return NoDash(vid)
+    else:
+      return open(os.path.join(os.path.dirname(__file__), 'whoami')).read().strip()
+  return NoDash(os.environ['USER'])
 
 def SnapshotName(commit, content):
   return '-'.join([Namespace(), 'linux', NoDash(commit), 'snapshot', content])
