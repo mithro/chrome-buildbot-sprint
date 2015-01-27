@@ -70,7 +70,8 @@ class CleanupHandler(webapp2.RequestHandler):
             self.response.out.write(
                 "cleaning up %s" % o.name)
             try:
-                o.destroy(driver)
+                if o.exists():
+                    o.destroy(driver)
             except Exception, e:
                 self.response.out.write(get_exception())
 
