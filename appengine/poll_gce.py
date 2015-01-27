@@ -16,6 +16,7 @@ import time
 PAGE_TEMPLATE = """\
 <html>
   <head>
+    <meta http-equiv="refresh" content="30">
     <title>{}</title>
   </head>
   <body>
@@ -58,7 +59,7 @@ class ScheduleHandler(webapp2.RequestHandler):
   def get(self):
     start = time.time()
 
-    for c in xrange(0, 60000, 30):
+    for c in xrange(0, 60, 20):
         taskqueue.add(url='/poll_gce/do',
                       method='GET',
                       countdown=c,
