@@ -123,6 +123,7 @@ class GCEObject(dict):
     assert self.exists()
     assert self.ready()
     self._gce_obj_destory(driver, self._gce_obj_get(driver, self.name))
+    memcache.delete(obj._cache_key())
 
 
 class Disk(GCEObject):
