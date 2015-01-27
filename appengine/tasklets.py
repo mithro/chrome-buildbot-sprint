@@ -28,6 +28,9 @@ class Tasklet(object):
   def run(self, driver):
     raise NotImplementedError("%s.run()" % self.__class__)
 
+  def can_run(self):
+    return self.is_startable() and not self.is_finished() and not self.is_running()
+
 
 class CreateXFromY(Tasklet):
   def __repr_extra__(self):

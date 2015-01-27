@@ -89,7 +89,7 @@ class PollGceHandler(webapp2.RequestHandler):
     memcache.set_multi({"gce_instances": instance_names,
                         "gce_disks": disk_names,
                         "gce_snapshots": snapshot_names },
-                       time=120)
+                       time=12000)
 
     for node in nodes:
         Instance.load(node.name, gce_obj=node)

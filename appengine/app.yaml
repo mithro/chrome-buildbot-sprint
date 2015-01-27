@@ -21,6 +21,9 @@ handlers:
 - url: /callback(/.*)?
   script: callback.APP
 
+- url: /stage(/.*)
+  script: stage_status.APP
+
 - url: /.*
   script: printenv.APP
 

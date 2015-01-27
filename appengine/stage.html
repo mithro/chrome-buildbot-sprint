@@ -1,0 +1,52 @@
+{% comment %}
+-*- coding: utf-8 -*-
+vim: set ts=4 sw=4 et sts=4 ai syn=htmldjango:
+{% endcomment %}
+<html>
+  <body>
+<style>
+
+table, td, th {
+ padding: 5px;
+ border: 1px solid black;
+}
+
+pre {
+ overflow-y: scroll;
+}
+
+</style>
+    {% if errors %}
+        <hr>
+        <h1>Error from last operation</h1>
+        <pre>{% for e in errors %}{{e}}{%endfor%}</pre>
+        <hr>
+    {% endif %}
+    <h1>{{ stage.stage_id }}</h1>
+    <p><pre>{{previous_commit}} -&gt; {{current_commit}}</pre></p>
+
+    <table border=1>
+        <tr>
+            <th>Task ID</th>
+            <th>Startable</th>
+            <th>Running</th>
+            <th>Finished</th>
+        </tr>
+        {% for task in stage.tasklets %}
+        <tr>
+            <td>{{task.tid}}</td>
+            <td {% if task.is_startable %}style='background-color: green;'{%endif%}>
+                {% if task.can_run %}
+                    <a href="?go={{task.tid}}">GO!</a>
+                {% else %}
+                    X
+                {% endif %}
+            </td>
+            <td {% if task.is_running %}style='background-color: red;'{%endif%}>X</td>
+            <td {% if task.is_finished %}style='background-color: blue;'{%endif%}>X</td>
+        </tr>
+        {% endfor %}
+    </table>        
+
+  </body>
+</html>

@@ -99,7 +99,7 @@ class GCEObject(dict):
     return obj
 
   def store(self):
-    memcache.set(self._cache_key(), self, time=120)
+    memcache.set(self._cache_key(), self, time=12000)
 
   def __init__(self, name, sentinal=None):
     assert sentinal is self._sentinal
