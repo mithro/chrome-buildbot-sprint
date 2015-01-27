@@ -87,7 +87,6 @@ class PollGceHandler(webapp2.RequestHandler):
     disk_names = [d.name for d in volumes]
     snapshot_names = [s.name for s in snapshots]
 
-    memcache.flush_all()
     memcache.set_multi({"gce_instances": instance_names,
                         "gce_disks": disk_names,
                         "gce_snapshots": snapshot_names },

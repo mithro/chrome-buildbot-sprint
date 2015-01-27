@@ -6,7 +6,7 @@ vim: set ts=4 sw=4 et sts=4 ai syn=htmldjango:
   <head>
    <meta http-equiv="refresh" content="5">
   </head>
-  <body>
+  <body {% if stage.is_finished() %}style="background-color: #778ed2;"{% endif %}>
 <style>
 
 table, td, th {

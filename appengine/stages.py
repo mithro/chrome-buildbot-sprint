@@ -30,6 +30,12 @@ class Stage(object):
   def objects(self):
     return self._objects
 
+  def is_finished(self):
+    for t in self.tasklets():
+      if not t.is_finished():
+        return False
+    return True
+
 
 class SyncStage(Stage):
 
