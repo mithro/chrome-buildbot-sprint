@@ -565,26 +565,40 @@ class Server(threading.Thread):
     CALLBACK_URL="project.attributes.callback"
 
     def filename(self):
-        tempfile.mktemp(suffix='.metadata.callback')
+        return tempfile.mktemp(suffix='.metadata.callback')
 
     def __init__(self, metadata_watcher):
+        threading.Thread.__init__(self)
         self.metadata = metadata_watcher
 
-        assert self.metadata.get(self.CALLBACK_URL), """\
+        assert self.metadata.get(self.CALLBACK_URL) or True, """\
 Please add the callback URL for status information to the Compute Engine project with;
 # gcloud compute project-info add-metadata --metadata callback="http://example.com/callback"
 Current project metadata:
 %s
 """ % (pprint.pformat(self.metadata.get("project", None)))
 
-
-    def post_action(self, data):
-        data = copy.deepcopy(data)
+    def get_data(self, data):
         data["post-time"] = time.time()
         data["instance-name"] = socket.gethostname()
+        return simplejson.dumps(data)
 
-        with open(self.filename(), 'w'):
-            filename.write(simplejson.dumps(data)})
+    def post_reliable(self, data):
+        with open(self.filename(), 'w') as f:
+            f.write(self.get_data(data))
+
+    def post_unreliable(self, data):
+        try:
+            url = self.metadata[self.CALLBACK_URL]
+            print "Posting data to callback URL %s:" % url
+            pprint.pprint(data)
+            encoded_data = urllib.urlencode({'data': self.get_data(data)})
+            response = urllib2.urlopen(url, data=encoded_data).read()
+            print 'Callback response: %s' % response
+        except urllib2.HTTPError as e:
+            print 'Callback error:', e
+            print e.headers.items()
+            print e.fp.read()
 
     def run(self):
         while True:
@@ -594,21 +608,11 @@ Current project metadata:
                 if not f.endswith(".metadata.callback"):
                     continue
 
-                data = open(f, 'r')
-
-                url = self.metadata[self.CALLBACK_URL]
-
-                print "Posting data to callback URL %s:" % url
-                pprint.pprint(data)
                 try:
-                    encoded_data = urllib.urlencode({'data': data})
-                    response = urllib2.urlopen(url, data=encoded_data).read()
-                    print 'Callback response: %s' % response
-                    break
+                    data = simplejson.loads(open(os.path.join(d, f), 'r').read())
+                    self.post_unreliable(data)
                 except Exception as e:
-                    print 'Callback error:', e
-                    print e.headers.items()
-                    print e.fp.read()
+                    traceback.print_exc()
 
             time.sleep(10)
 
@@ -659,11 +663,14 @@ class Handler(object):
             }
             self.post(data)
 
-    def post(self, data):
+    def post(self, data, unreliable=False):
         data.update({
             "handler": self.__class__.__name__,
         })
-        self.server.post_action(data)
+        if unreliable:
+            self.server.post_unreliable(data)
+        else:
+            self.server.post_reliable(data)
 
     @classmethod
     def run_helper(cls, cmd, output):
@@ -751,7 +758,7 @@ class HandlerLongCommand(HandlerAsync):
                 "type": "progress",
                 "cmd" : cmd,
                 "output": open(outfile.name, 'r').read(),
-            })
+            }, unreliable=True)
 
             retcode = p.poll()
             if retcode is not None:
@@ -928,7 +935,4 @@ if __name__ == "__main__":
     watcher.add_handler(".*", Printer)
     watcher.start()
     watcher.join()
-
-
-
 
