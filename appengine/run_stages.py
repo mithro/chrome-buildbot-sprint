@@ -3,11 +3,16 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
+from __future__ import print_function
+
 try:
   from termcolor import cprint as print_color
 except ImportError:
   def print_color(*args, **kw):
     print(*args, **kw)
+
+import threading
+PRINT_LOCK = threading.RLock()
 
 import sys
 def info(type, value, tb):
@@ -15,7 +20,11 @@ def info(type, value, tb):
   if hasattr(sys, 'ps1') or not sys.stderr.isatty() or isinstance(type, ResourceInUseError):
     # we are in interactive mode or we don't have a tty-like
     # device, so we call the default hook
-    sys.__excepthook__(type, value, tb)
+    with PRINT_LOCK:
+      print("+" * 80)
+      print(threading.currentThread())
+      sys.__excepthook__(type, value, tb)
+      print("+" * 80)
   else:
     import traceback, pdb
     # we are NOT in interactive mode, print the exception...
@@ -25,6 +34,9 @@ def info(type, value, tb):
     pdb.pm()
 
 sys.excepthook = info
+
+
+from stages import *
 
 
 PADDING=60
@@ -66,10 +78,6 @@ def pretty_print_status(t, skip_tid=False):
     pretty_print_status(t.task_to_run, skip_tid=True)
   else:
     print()
-
-
-import threading
-print_lock = threading.RLock()
 
 previous_commit = "fa1651193bf94120"
 current_commit = "32cbfaa6478f66b9"
@@ -117,7 +125,7 @@ class Updater(threading.Thread):
           Snapshot.load(snapshot.name, gce_obj=snapshot)
 
         self.ready = True
-        if self.output:
+        with PRINT_LOCK:
           if old_nodes != nodes or old_volumes != volumes or old_snapshots != snapshots:
             print("="*80+'\n', time.time(), "Finish updating gce\n", pprint.pformat(memcache), '\n'+"="*80+'\n')
           old_nodes = nodes
@@ -132,16 +140,14 @@ updater.start()
 while not updater.ready and updater.is_alive():
   time.sleep(1)
 
-print("SyncStage")
-print("-"*80)
-for t in SyncStage(previous_commit, current_commit).tasklets():
-  pretty_print_status(t)
-
-
 try:
-  updater.output = False
-  raw_input("okay? ")
-  updater.output = True
+  with PRINT_LOCK:
+    print("SyncStage")
+    print("-"*80)
+    for t in SyncStage(previous_commit, current_commit).tasklets():
+      pretty_print_status(t)
+
+    raw_input("okay? ")
 
   """
   print("-"*80)
@@ -156,26 +162,29 @@ try:
   """
 
   while updater.is_alive():
-    print("-" * 80)
-    for t in SyncStage(previous_commit, current_commit).tasklets():
-      pretty_print_status(t)
-      if t.is_startable():
-        if t.is_running():
-          continue
+    with PRINT_LOCK:
+      print("-" * 80)
+      for t in SyncStage(previous_commit, current_commit).tasklets():
+        pretty_print_status(t)
+        if t.is_startable():
+          if t.is_running():
+            continue
 
-        if t.is_finished():
-          continue
+          if t.is_finished():
+            continue
 
-        updater.output = False
-        raw_input("run (%s)? " % t.tid)
-        updater.output = True
-        def run(t=t):
-          driver = libcloud_gae.new_driver()
-          t.run(driver)
-        threading.Thread(target=run).start()
-    print("-" * 80)
+          updater.output = False
+          raw_input("run (%s)? " % t.tid)
+          updater.output = True
+          def run(t=t):
+            driver = libcloud_gae.new_driver()
+            t.run(driver)
+          threading.Thread(target=run).start()
+      print("-" * 80)
 
     time.sleep(1)
 finally:
   updater.go = False
-    updater.join()
+  updater.join()
+
+
