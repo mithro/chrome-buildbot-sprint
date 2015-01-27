@@ -21,16 +21,35 @@ class Stage(object):
     self.previous_commit = previous_commit
 
 
+  def inputs(self):
+    return self._inputs
+
+  def outputs(self):
+    return self._outputs
+
+  def objects(self):
+    return self._objects
+
+
 class SyncStage(Stage):
 
   def tasklets(self):
     sid = self.stage_id
 
+    self._inputs = []
+    self._outputs = []
+    self._objects = []
+
     previous_snap_src = Snapshot.load(SnapshotName(self.previous_commit, "src"))
+    self._inputs.append(previous_snap_src)
 
     instance = Instance.load("%s-instance" % sid)
+    self._objects.append(instance)
     disk_src = Disk.load("%s-disk-src" % sid)
+    self._objects.append(disk_src)
+
     snap_src = Snapshot.load(SnapshotName(self.current_commit, "src"))
+    self._outputs.append(snap_src)
 
     tasks = []
     tasks.append(CreateInstance(sid+"-instance-create", instance, required_snapshots=[previous_snap_src]))

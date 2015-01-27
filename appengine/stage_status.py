@@ -12,11 +12,17 @@ import sys
 from google.appengine.api import modules
 from google.appengine.api import users
 import webapp2
-from google.appengine.ext.webapp import template
+
+import jinja2
 
 import stages
 
-STAGE_TEMPLATE = os.path.join(os.path.dirname(__file__), 'stage.html')
+TEMPLATE_ENV = jinja2.Environment()
+import pprint
+TEMPLATE_ENV.filters['pprint'] = pprint.pformat
+
+TEMPLATE_STAGE = TEMPLATE_ENV.from_string(
+    open(os.path.join(os.path.dirname(__file__), 'stage.html')).read())
 
 def get_exception():
     import traceback
@@ -45,7 +51,11 @@ class MainHandler(webapp2.RequestHandler):
                    error.append(str(e))
                    error.append(get_exception())
 
-        self.response.out.write(template.render(STAGE_TEMPLATE, locals()))
+        self.response.out.write(TEMPLATE_STAGE.render(
+            stage=stage,
+            previous_commit=previous_commit,
+            current_commit=current_commit)
+            )
 
 
 APP = webapp2.WSGIApplication([
