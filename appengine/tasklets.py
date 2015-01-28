@@ -3,6 +3,7 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
+import logging
 
 from tasklet_time_log import TaskletTimeLog
 from objects import *
@@ -27,15 +28,17 @@ class Tasklet(object):
   def is_finished(self):
     raise NotImplementedError("%s.is_finished()" % self.__class__)
 
-  def timed_run(self, driver):
-    TaskletTimeLog.start(self)
+  def can_run(self):
+    return self.is_startable() and not self.is_finished() and not self.is_running()
+
+  def run(self, driver):
+    logging.debug('RUN: %s' % self.tid)
+    TaskletTimeLog.start_timer(self)
     self._run(driver)
 
   def _run(self, driver):
     raise NotImplementedError("%s.run()" % self.__class__)
 
-  def can_run(self):
-    return self.is_startable() and not self.is_finished() and not self.is_running()
 
 
 class CreateXFromY(Tasklet):
@@ -131,9 +134,8 @@ class AttachDiskToInstance(Tasklet):
 
 
 class DetachDiskFromInstance(AttachDiskToInstance):
-
-  def __init__(self, tid, instance, disk):
-    AttachDiskToInstance.__init__(self, tid, instance, disk, None)
+  def __init__(self, stage, tid, instance, disk):
+    AttachDiskToInstance.__init__(self, stage, tid, instance, disk, None)
 
   def is_finished(self):
     return not self.instance.attached(self.disk)
@@ -292,12 +294,12 @@ class WaitOnOtherTasks(Tasklet):
 
     return True
 
-  def run(self, driver):
+  def _run(self, driver):
     return self.task_to_run.run(driver)
 
 class CancelledByOtherTask(Tasklet):
   def __init__(self, task_to_run, task_indicating_finished):
-    Tasklet.__init__(self, task_to_run.tid)
+    Tasklet.__init__(self, task_to_run.stage, task_to_run.tid)
     self.task_to_run = task_to_run
     self.task_indicating_finished = task_indicating_finished
 
@@ -310,6 +312,6 @@ class CancelledByOtherTask(Tasklet):
   def is_finished(self):
     return self.task_to_run.is_finished() or self.task_indicating_finished.is_finished()
 
-  def run(self, driver):
+  def _run(self, driver):
     return self.task_to_run.run(driver)
 

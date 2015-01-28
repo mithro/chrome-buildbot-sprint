@@ -102,7 +102,7 @@ class PollGceHandler(webapp2.RequestHandler):
     for snapshot in snapshots:
         Snapshot.load(snapshot.name, gce_obj=snapshot)
 
-    TaskletTimeLog.update_timers(driver)
+    TaskletTimeLog.update_timers()
 
     result = PAGE_TEMPLATE.format(
         'poll_gce/do',

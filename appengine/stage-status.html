@@ -35,7 +35,7 @@ pre {
             <th>Running</th>
             <th>Finished</th>
         </tr>
-        {% for task in stage.tasklets() %}
+        {% for task in stage.tasklets %}
         <tr>
             <td>{{task.tid}}</td>
             <td {% if task.is_startable() %}style='background-color: green;'{%endif%}>
