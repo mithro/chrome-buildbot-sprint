@@ -51,7 +51,6 @@ class TaskletTimeLog(object):
     import stages
     timer_map = dict((timer.tid(), timer) for timer in TaskletTimer.query())
     stage_set = {(timer.stage_class, timer.stage_previous_commit, timer.stage_current_commit) for timer in timer_map.values()}
-    logging.warn(stage_set)
     for stage_class, previous_commit, current_commit in stage_set:
       for tasklet in getattr(stages, stage_class)(previous_commit, current_commit).tasklets:
         if tasklet.tid in timer_map and tasklet.is_finished():
