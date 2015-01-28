@@ -815,6 +815,19 @@ class HandlerDiskBase(Handler):
             raise Exception("Disk with id %r not found on instance %r" % (
                 disk_id, self.metadata['instance.disks']))
 
+    def win_mount(self, _, value):
+        # Make the mount point if it doesn't exist
+        mnt = os.path.join(os.path.split(value['mount-point']))
+        if not os.path.exists(mnt):
+            subprocess.check("md %s" % )
+
+        # Mount the directory
+        success &= (0 == self.run_helper("mountvol %s %s" % (
+            self.device(value['disk-id']), mnt), output))
+        
+
+
+
     def mount(self, _, value):
         assert 'mount-point' in value, value
         assert 'disk-id' in value, value
