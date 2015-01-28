@@ -43,7 +43,7 @@ class RunStagesHandler(webapp2.RequestHandler):
             queue_name='run',
         )
         things_started.append("Cleanup of %s" % stage.stage_id)
-      else:
+      elif not stage.is_finished():
         for tasklet in stage.tasklets():
           if tasklet.can_run():
             taskqueue.add(
