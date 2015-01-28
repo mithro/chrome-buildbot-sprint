@@ -12,9 +12,6 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
-- url: /start_instance/?
-  script: start_instance.APP
-
 - url: /poll_gce/.*
   script: poll_gce.APP
 
