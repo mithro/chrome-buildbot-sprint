@@ -671,6 +671,7 @@ class Handler(object):
             tb = StringIO.StringIO()
             traceback.print_exc(file=tb)
             tb.seek(0)
+            output.append("%s %s %s %s" % (name, old_value, new_value, kw))
             output.append(tb.getvalue())
         finally:
             print "-"*80
