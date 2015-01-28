@@ -790,7 +790,7 @@ class HandlerLongCommand(HandlerAsync):
             )
 
         while True:
-            if sys.platform = "win32":
+            if sys.platform == "win32":
                 self.post({
                     "type": "progress",
                     "cmd" : cmd,
