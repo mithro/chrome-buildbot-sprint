@@ -242,6 +242,7 @@ class Instance(GCEObject):
   MACHINE_TYPE = 'n1-standard-2'
   BOOT_IMAGE = 'boot-image-wip-2'
   STARTUP_SCRIPT_URL = 'https://raw.githubusercontent.com/mithro/chrome-buildbot-sprint/master/metadata_watcher.py'
+  WINDOWS_STARTUP_SCRIPT = 'windows-startup-script.ps1'
   TAGS = ('http-server',)
 
   def create(self, driver):
@@ -250,7 +251,8 @@ class Instance(GCEObject):
       size=self.MACHINE_TYPE,
       image=self.BOOT_IMAGE,
       ex_tags=self.TAGS,
-      ex_metadata={'startup-script-url': self.STARTUP_SCRIPT_URL},
+      ex_metadata={'startup-script-url': self.STARTUP_SCRIPT_URL,
+                   'windows-startup-script-ps1': self.WINDOWS_STARTUP_SCRIPT},
       ))
 
   def attach(self, driver, disk, mode):
