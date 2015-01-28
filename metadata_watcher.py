@@ -901,6 +901,7 @@ class HandlerDiskBase(Handler):
         success &= (0 == self.run_helper("mountvol %s %s" % (
             self.device(value['disk-id']), mnt), output))
 
+        return success, output
 
 
     def umount_win32(self, _, value):
