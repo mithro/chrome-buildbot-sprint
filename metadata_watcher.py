@@ -773,6 +773,8 @@ class HandlerLongCommand(HandlerAsync):
         else:
             cmd = value['cmd']
 
+        cwd = os.path.join(*path_split_all(value.get('cwd', os.getcwd())))
+
         output = []
         output.append("="*80)
         output.append("Running: %r" % cmd)
@@ -784,7 +786,8 @@ class HandlerLongCommand(HandlerAsync):
             stdout=outfile,
             stderr=subprocess.STDOUT,
             shell=True,
-            cwd=value.get('cwd', os.getcwd()))
+            cwd=cwd,            
+            )
 
         while True:
             self.post({
