@@ -13,12 +13,11 @@ def NoDash(string):
   return string.replace('-', '')
 
 def Namespace():
-  vid = os.environ.get('CURRENT_VERSION_ID', None)
-  if vid:
-    if not os.environ['APPLICATION_ID'].startswith('dev'):
-      return NoDash(vid)
-    else:
+  app_id = os.environ.get('APPLICATION_ID')
+  if app_id:
+    if app_id.startswith('dev'):
       return open(os.path.join(os.path.dirname(__file__), 'whoami')).read().strip()
+    return 'appengine'
   return NoDash(os.environ['USER'])
 
 def SnapshotName(commit, content):
