@@ -243,12 +243,15 @@ class RunCommandOnInstance(MetadataTasklet):
   METADATA_RESULT='long-commands-result'
   HANDLER='HandlerLongCommand'
 
-  def __init__(self, tid, instance, command):
+  def __init__(self, tid, instance, command, **kw):
     MetadataTasklet.__init__(self, tid, instance)
     self.command = command
-    
+   
+    kw['cmd'] = self.command
+    self.extra = kw
+
   def _metadata_values(self):
-    return [{'cmd': self.command, 'user': 'ubuntu'}]
+    return [kw]
 
   def is_startable(self):
     return self.instance.ready()
