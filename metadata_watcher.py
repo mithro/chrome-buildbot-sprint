@@ -815,26 +815,11 @@ class HandlerDiskBase(Handler):
             raise Exception("Disk with id %r not found on instance %r" % (
                 disk_id, self.metadata['instance.disks']))
 
-    def win_mount(self, _, value):
-        # Make the mount point if it doesn't exist
-        mnt = os.path.join(os.path.split(value['mount-point']))
-        if not os.path.exists(mnt):
-            subprocess.check("md %s" % mnt)
+    #----------------------------
 
-        # Mount the directory
-        success &= (0 == self.run_helper("mountvol %s %s" % (
-            self.device(value['disk-id']), mnt), output))
-        
-
-
-
-    def mount(self, _, value):
-        assert 'mount-point' in value, value
-        assert 'disk-id' in value, value
-        self.assert_disk_attached(value['disk-id'])
-
-        output = []
+    def mount_linux2(self, _, value):
         success = True
+        output = []
 
         # Make the mount point directory if it doesn't exist
         if not os.path.exists(value['mount-point']):
@@ -854,11 +839,7 @@ class HandlerDiskBase(Handler):
 
         return success, output
 
-    def umount(self, _, value):
-        assert 'mount-point' in value
-        assert 'disk-id' in value
-        self.assert_disk_attached(value['disk-id'])
-
+    def umount_linux2(self, _, value):
         output = []
         success = True
         found = False
@@ -874,6 +855,70 @@ class HandlerDiskBase(Handler):
 
         return (found and success), output
 
+    #----------------------------
+
+    def mount_win32(self, _, value):
+        success = True
+        output = []
+
+        # Get the directory in windows format.
+        mnt = os.path.join(os.path.split(value['mount-point']))
+
+        # Make the directory which contains the mount point
+        parent = os.path.join(os.path.split(mnt)[:-1])
+        if not os.path.exists(parent):
+            os.makedirs(parent)
+            
+        # Make the mount point if it doesn't exist
+        if not os.path.exists(mnt):
+            subprocess.check("md %s" % mnt)
+            success &= (0 == self.run_helper("md %s" % mnt), output)
+            if not success:
+                return
+
+        # Mount the directory
+        success &= (0 == self.run_helper("mountvol %s %s" % (
+            self.device(value['disk-id']), mnt), output))
+
+
+
+    def umount_win32(self, _, value):
+        output = []
+        success = True
+        found = False
+
+        self.run_helper("mountvol", output)
+
+        "mountvol %s /L"
+        "mountvol %s /D"
+        pass
+
+    #----------------------------
+
+    def mount(self, _, value):
+        assert 'mount-point' in value, value
+        assert 'disk-id' in value, value
+        self.assert_disk_attached(value['disk-id'])
+
+        return getattr(self, 'mount_%s' % sys.platform)(_, value)
+
+    def umount(self, _, value):
+        assert 'mount-point' in value
+        assert 'disk-id' in value
+        self.assert_disk_attached(value['disk-id'])
+
+        return getattr(self, 'umount_%s' % sys.platform)(_, value)
+
+
+
+class HandlerDiskWindows(HandlerDiskBase):
+    def really_mount(self, _, value):
+
+
+    def really_umount(self, _, value):
+
+
+class HandlerDiskLinux
 
 class HandlerMount(HandlerDiskBase):
     NAMESPACE = r"instance\.attributes\.mount\[\]"
