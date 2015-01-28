@@ -819,7 +819,7 @@ class HandlerDiskBase(Handler):
         # Make the mount point if it doesn't exist
         mnt = os.path.join(os.path.split(value['mount-point']))
         if not os.path.exists(mnt):
-            subprocess.check("md %s" % )
+            subprocess.check("md %s" % mnt)
 
         # Mount the directory
         success &= (0 == self.run_helper("mountvol %s %s" % (

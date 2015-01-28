@@ -40,6 +40,10 @@ class Stage(object):
       for o in self.objects():
         if o.exists():
           return True
+    else:
+      for o in self.objects():
+        if o.status == "TERMINATED":
+          return True
     return False
 
   def is_finished(self):
