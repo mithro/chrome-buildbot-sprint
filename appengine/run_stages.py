@@ -35,7 +35,7 @@ class RunStagesHandler(webapp2.RequestHandler):
       stage = stages.SyncStage(previous_commit, current_commit)
       stage.url = '/stage/sync/previous-%s/current-%s' % (previous_commit, current_commit)
 
-      if stage.is_finished():
+      if stage.needs_cleanup():
         cleanup_url = '/cleanup/sync/previous-%s/current-%s' % (previous_commit, current_commit)
         taskqueue.add(
             url=cleanup_url,

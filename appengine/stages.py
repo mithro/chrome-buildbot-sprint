@@ -30,6 +30,18 @@ class Stage(object):
   def objects(self):
     return self._objects
 
+  def cleanup(self, driver):
+    for o in self.objects():
+        if o.exists():
+            o.destroy(driver)
+
+  def needs_cleanup(self):
+    if self.is_finished():
+      for o in self.objects():
+        if o.exists():
+          return True
+    return False
+
   def is_finished(self):
     self.tasklets()
     for o in self.outputs():

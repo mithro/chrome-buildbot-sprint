@@ -62,20 +62,10 @@ class CleanupHandler(webapp2.RequestHandler):
     def get(self, stage_type, previous_commit, current_commit):
         self.response.headers.add_header('Content-Type', 'text/plain')
         stage = getattr(stages, '%sStage' % stage_type.title())(previous_commit, current_commit)
-        assert stage.is_finished()
+        assert stage.needs_cleanup()
 
         driver = libcloud_gae.new_driver()
-
-        for o in stage.objects():
-            self.response.out.write(
-                "cleaning up %s\n" % o.name)
-            try:
-                if o.exists():
-                    o.destroy(driver)
-            except Exception, e:
-                self.response.out.write(get_exception())
-
-            self.response.out.write(" done\n")
+        stage.cleanup(driver)
 
 
 APP = webapp2.WSGIApplication([
