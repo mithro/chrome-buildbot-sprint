@@ -790,11 +790,12 @@ class HandlerLongCommand(HandlerAsync):
             )
 
         while True:
-            self.post({
-                "type": "progress",
-                "cmd" : cmd,
-                "output": open(outfile.name, 'r').read(),
-            }, unreliable=True)
+            if sys.platform = "win32":
+                self.post({
+                    "type": "progress",
+                    "cmd" : cmd,
+                    "output": open(outfile.name, 'r').read(),
+                }, unreliable=True)
 
             retcode = p.poll()
             if retcode is not None:
