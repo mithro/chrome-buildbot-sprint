@@ -1,7 +1,8 @@
 import os
 
-import webapp2
 import jinja2
+import logging
+import webapp2
 from google.appengine.api import taskqueue
 
 import helpers
@@ -50,10 +51,11 @@ class RunStagesHandler(webapp2.RequestHandler):
                 method='GET',
                 queue_name='run',
             )
-            things_started.append("For %s starting %s" % (stage.stage_id, t.tid))
+            things_started.append("For %s starting %s" % (stage.stage_id, tasklet.tid))
       stage_list.append(stage)
       previous_commit = current_commit
-
+    if things_started:
+      logging.debug(things_started)
     self.response.out.write(TEMPLATE_STAGE.render(stages=stage_list, things_started=things_started))
 
 
