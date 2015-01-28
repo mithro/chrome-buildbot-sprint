@@ -13,16 +13,16 @@ def start_time_sorted(model):
 
 class TimelineHandler(webapp2.RequestHandler):
   def get(self):
-    self.response.write('Current time: %s\n' % datetime.now())
+    now = datetime.now()
+    self.response.write('Current time: %s\n' % now)
     self.response.write('\n\n')
     self.response.write('Running tasklets:\n')
     for timer in start_time_sorted(TaskletTimer):
-      self.response.write(' - %s %s\n' % (timer.start_time, timer.tid()))
+      self.response.write(' - %s %s (%ds)\n' % (timer.start_time, timer.tid(), (now - timer.start_time).total_seconds()))
     self.response.write('\n\n')
     self.response.write('Completed tasklets:\n')
     for duration in start_time_sorted(TaskletDuration):
       self.response.write(' - %s %s (%ds)\n' % (duration.start_time, duration.tid, duration.seconds))
-    self.response.write(' - %s %s (%ds)\n' % (duration.start_time, duration.tid, duration.seconds))
     self.response.headers.add_header('Content-Type', 'text/plain')
 
 
