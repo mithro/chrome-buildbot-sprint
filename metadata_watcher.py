@@ -881,7 +881,7 @@ class HandlerDiskBase(Handler):
         output = []
 
         # Get the directory in windows format.
-        mnt = os.path.join(os.path.split(value['mount-point']))
+        mnt = os.path.join(*split_n_join(value['mount-point']))
 
         # Make the directory which contains the mount point
         parent = os.path.join(os.path.split(mnt)[:-1])
