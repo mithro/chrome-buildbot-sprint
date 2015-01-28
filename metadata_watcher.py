@@ -895,7 +895,7 @@ class HandlerDiskBase(Handler):
         if not os.path.exists(mnt):
             success &= (0 == self.run_helper("md %s" % mnt, output))
             if not success:
-                return
+                return False, output
 
         # Mount the directory
         success &= (0 == self.run_helper("mountvol %s %s" % (
