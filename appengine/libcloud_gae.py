@@ -6,7 +6,7 @@ import patch_libcloud
 
 import libcloud.security
 libcloud.security.VERIFY_SSL_CERT = False
-from libcloud.common.google import ResourceNotFoundError
+from libcloud.common.google import ResourceNotFoundError, ResourceExistsError
 from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
 from libcloud.compute.ssh import ParamikoSSHClient as SSHClient

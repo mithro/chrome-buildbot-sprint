@@ -18,21 +18,24 @@ class Tasklet(object):
     self.stage = stage
     self.tid = tid
 
-  def is_startable(self, driver):
-    raise NotImplementedError()
+  def is_startable(self):
+    raise NotImplementedError("%s.is_startable()" % self.__class__)
 
-  def is_running(self, driver):
-    raise NotImplementedError()
+  def is_running(self):
+    raise NotImplementedError("%s.is_running()" % self.__class__)
 
-  def is_finished(self, driver):
-    raise NotImplementedError()
+  def is_finished(self):
+    raise NotImplementedError("%s.is_finished()" % self.__class__)
 
   def timed_run(self, driver):
     TaskletTimeLog.start(self)
     self._run(driver)
 
   def _run(self, driver):
-    raise NotImplementedError()
+    raise NotImplementedError("%s.run()" % self.__class__)
+
+  def can_run(self):
+    return self.is_startable() and not self.is_finished() and not self.is_running()
 
 
 class CreateXFromY(Tasklet):
@@ -44,18 +47,19 @@ class CreateXFromY(Tasklet):
     self.src = src
     self.dst = dst
 
-  def is_startable(self, driver):
-    return self.src.exists(driver)
+  def is_startable(self):
+    return self.src.exists() and self.src.ready()
 
-  def is_running(self, driver):
-    return self.dst.exists(driver)
+  def is_running(self):
+    return self.dst.exists() and not self.is_finished()
 
-  def is_finished(self, driver):
-    return self.dst.ready(driver)
+  def is_finished(self):
+    return self.dst.ready()
+
 
   def _run(self, driver):
-    assert self.src.exists(driver)
-    assert not self.dst.exists(driver)
+    assert self.src.exists()
+    assert not self.dst.exists()
     self.dst.create(driver, self.src.name)
 
 
@@ -79,71 +83,65 @@ class CreateInstance(Tasklet):
     self.instance = instance
     self.required_snapshots = required_snapshots
 
-  def is_startable(self, driver):
+  def is_startable(self):
     for snapshot in self.required_snapshots:
-      if not snapshot.ready(driver):
+      if not snapshot.ready():
         return False
     return True
 
-  def is_running(self, driver):
-    return self.instance.exists(driver)
+  def is_running(self):
+    return self.instance.exists() and not self.is_finished()
 
-  def is_finished(self, driver):
-    return self.instance.ready(driver)
+  def is_finished(self):
+    return self.instance.ready()
 
   def _run(self, driver):
     self.instance.create(driver)
 
 
 class AttachDiskToInstance(Tasklet):
-  def __init__(self, stage, tid, instance, disk):
+  def __init__(self, stage, tid, instance, disk, mode):
     Tasklet.__init__(self, stage, tid)
     self.instance = instance
     self.disk = disk
+    self.mode = mode
 
-  def is_startable(self, driver):
-    if not self.instance.exists(driver):
+  def is_startable(self):
+    if not self.instance.exists() or not self.instance.ready():
       return False
 
-    if not self.disk.exists(driver):
+    if not self.disk.exists() and self.disk.ready():
       return False
 
     return True
 
-  def is_running(self, driver):
-    return True
+  def is_running(self):
+    return False
 
-  def is_finished(self, driver):
-    return self.instance.attached(self.disk, driver)
+  def is_finished(self):
+    return self.instance.attached(self.disk)
+
 
   def _run(self, driver):
-    assert self.instance.exists(driver)
-    assert self.disk.exists(driver)
-    self.instance.attach(driver, disk)
+    assert self.instance.exists()
+    assert self.instance.ready()
+    assert self.disk.exists()
+    assert self.disk.ready()
+    self.instance.attach(driver, self.disk, self.mode)
 
 
 class DetachDiskFromInstance(AttachDiskToInstance):
-  def is_startable(self, driver):
-    if not self.instance.exists(driver):
-      return False
 
-    if not self.disks.exists(driver):
-      return False
+  def __init__(self, tid, instance, disk):
+    AttachDiskToInstance.__init__(self, tid, instance, disk, None)
 
-    return True
-
-  def is_running(self, driver):
-    return True
-
-  def is_finished(self, driver):
-    return not self.instance.attached(self.disk, driver)
+  def is_finished(self):
+    return not self.instance.attached(self.disk)
 
   # ----------------------------------------
 
   def _run(self, driver):
-    self.instance.detach(driver, disk)
-
-      
+    self.instance.detach(driver, self.disk)
 
 class MetadataTasklet(Tasklet):
   METADATA_KEY=None
@@ -153,27 +151,47 @@ class MetadataTasklet(Tasklet):
     Tasklet.__init__(self, stage, tid)
     self.instance = instance
 
-  def _required_metadata(self, driver):
-    raise NotImplementedError()
+  def _metadata_values(self):
+    raise NotImplementedError("%s._metadata_values()" % self.__class__)
 
-  def is_running(self, driver):
-    self.instance.refresh(driver)
-
+  def is_running(self):
     metadata = self.instance.metadata
     if self.METADATA_KEY not in metadata:
       return False
 
-    for data in self._metadata_values(driver):
+    for data in self._metadata_values():
       if data not in metadata[self.METADATA_KEY]:
         return False
-    return True
 
-  def is_finished(self, driver):
-    self.instance.refresh(driver)
+    return not self.is_finished()
 
+  def is_finished(self):
     metadata = self.instance.metadata
     if self.METADATA_RESULT not in metadata:
       return False
+
+    for data in self._metadata_values():
+      if data not in metadata[self.METADATA_RESULT]:
+        return False
+
+    return True
+
+  @classmethod
+  def handle_callback(cls, driver, instance, success, old_value, new_value):
+    if success is not True:
+      return False
+    if new_value is None:
+      return False
+
+    metadata = instance.metadata
+    if cls.METADATA_RESULT not in metadata:
+      metadata[cls.METADATA_RESULT] = []
+
+    if new_value in metadata[cls.METADATA_RESULT]:
+      return False
+
+    metadata[cls.METADATA_RESULT].append(new_value)
+    instance.set_metadata(driver, {cls.METADATA_RESULT: metadata[cls.METADATA_RESULT]})
     return True
 
   # ----------------------------------------
@@ -183,79 +201,115 @@ class MetadataTasklet(Tasklet):
     if self.METADATA_KEY not in metadata:
       metadata[self.METADATA_KEY] = []
 
-    for data in self._metadata_values(driver):
+    for data in self._metadata_values():
       if data not in metadata[self.METADATA_KEY]:
         metadata[self.METADATA_KEY].append(data)
 
-    self.instance.set_metadata(driver, mount=metadata[self.METADATA_KEY])
+    self.instance.set_metadata(driver, {self.METADATA_KEY: metadata[self.METADATA_KEY]})
     
 
 
 class MountDisksInInstance(MetadataTasklet):
   METADATA_KEY='mount'
+  METADATA_RESULT='mount-result'
+  HANDLER='HandlerMount'
 
   def __init__(self, stage, tid, instance, disks_and_mnts):
     MetadataTasklet.__init__(self, stage, tid, instance)
+    assert isinstance(disks_and_mnts, (list, tuple))
     self.disks_and_mnts = disks_and_mnts
 
-  def _required_metadata(self, driver):
+  def _metadata_values(self):
     data = [] 
-    for disk, mnt in self.disks:
+    for disk, mnt in self.disks_and_mnts:
       data.append({
         'mount-point': mnt,
         'disk-id': disk.name,
         'user': 'ubuntu',
+        'tid': self.tid,
       })
     return data
 
-  def is_startable(self, driver):
-    print self.disks_and_mnts
+  def is_startable(self):
     for d, mnt in self.disks_and_mnts:
-      if not AttachDiskToInstance(None, self.instance, d).is_finished(driver):
+      if not self.instance.attached(d):
         return False
     return True
-
-  def is_finished(self, driver):
-    return self.instance.fetch(driver, "mount") is not None
 
 
 class UnmountDisksInInstance(MountDisksInInstance):
   METADATA_KEY='umount'
+  METADATA_RESULT='umount-result'
+  HANDLER='HandlerUnmount'
 
 
 
 class RunCommandOnInstance(MetadataTasklet):
   METADATA_KEY='long-commands'
+  METADATA_RESULT='long-commands-result'
+  HANDLER='HandlerLongCommand'
 
   def __init__(self, stage, tid, instance, command):
     MetadataTasklet.__init__(self, stage, tid, instance)
     self.command = command
     
-  def _required_metadata(self, driver):
-    return [self.command]
+  def _metadata_values(self):
+    return [{'cmd': self.command, 'user': 'ubuntu'}]
 
-  def is_startable(self, driver):
-    return self.instance.ready(driver)
+  def is_startable(self):
+    return self.instance.ready()
 
 
 class WaitOnOtherTasks(Tasklet):
+  def __repr_extra__(self):
+    return " %s %s" % (self.task_to_run, self.tasks_to_wait_for)
+
   def __init__(self, task_to_run, tasks_to_wait_for):
     Tasklet.__init__(self, task_to_run.stage, task_to_run.tid)
     self.task_to_run = task_to_run
     self.tasks_to_wait_for = tasks_to_wait_for
 
-  def is_startable(self, driver):
-    if not self.task_to_run.is_startable(driver):
+  def is_startable(self):
+    if not self.task_to_run.is_startable():
       return False
 
     for task in self.tasks_to_wait_for:
-      if not task.is_finished(driver):
+      if not task.is_finished():
         return False
 
     return True
 
-  # Map everything else onto the task which should run
-  def __getattr__(self, key):
-    return getattr(self, self.task_to_run, key)
+  def is_running(self):
+    return self.task_to_run.is_running()
 
+  def is_finished(self):
+    if not self.task_to_run.is_finished():
+      return False
+
+    for task in self.tasks_to_wait_for:
+      if not task.is_finished():
+        return False
+
+    return True
+
+  def run(self, driver):
+    return self.task_to_run.run(driver)
+
+class CancelledByOtherTask(Tasklet):
+  def __init__(self, task_to_run, task_indicating_finished):
+    Tasklet.__init__(self, task_to_run.tid)
+    self.task_to_run = task_to_run
+    self.task_indicating_finished = task_indicating_finished
+
+  def is_startable(self):
+    return self.task_to_run.is_startable()
+
+  def is_running(self):
+    return self.task_to_run.is_running()
+
+  def is_finished(self):
+    return self.task_to_run.is_finished() or self.task_indicating_finished.is_finished()
+
+  def run(self, driver):
+    return self.task_to_run.run(driver)
 

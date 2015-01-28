@@ -559,32 +559,64 @@ class MetadataWatcher(threading.Thread):
             self.metadata.update(new_metadata)
             self.last_etag = etag
 
-class Server(object):
+# ------------------------------------------------------------
+
+class Server(threading.Thread):
     CALLBACK_URL="project.attributes.callback"
 
+    def filename(self):
+        return tempfile.mktemp(suffix='.metadata.callback')
+
     def __init__(self, metadata_watcher):
+        threading.Thread.__init__(self)
         self.metadata = metadata_watcher
 
-    def post_action(self, data):
-        assert self.metadata.get(self.CALLBACK_URL), """\
+        assert self.metadata.get(self.CALLBACK_URL) or True, """\
 Please add the callback URL for status information to the Compute Engine project with;
 # gcloud compute project-info add-metadata --metadata callback="http://example.com/callback"
 Current project metadata:
 %s
 """ % (pprint.pformat(self.metadata.get("project", None)))
 
-        url = self.metadata[self.CALLBACK_URL]
-        data = copy.deepcopy(data)
+    def get_data(self, data):
+        data["post-time"] = time.time()
         data["instance-name"] = socket.gethostname()
-        print "Posting data to callback URL %s:" % url
-        pprint.pprint(data)
+        return simplejson.dumps(data)
+
+    def post_reliable(self, data):
+        with open(self.filename(), 'w') as f:
+            f.write(self.get_data(data))
+
+    def post_unreliable(self, data):
         try:
-            encoded_data = urllib.urlencode({'data': simplejson.dumps(data)})
+            url = self.metadata[self.CALLBACK_URL]
+            print "Posting data to callback URL %s:" % url
+            pprint.pprint(data)
+            encoded_data = urllib.urlencode({'data': self.get_data(data)})
             response = urllib2.urlopen(url, data=encoded_data).read()
             print 'Callback response: %s' % response
-        except Exception as e:
+        except urllib2.HTTPError as e:
             print 'Callback error:', e
+            print e.headers.items()
+            print e.fp.read()
 
+    def run(self):
+        while True:
+            d = os.path.dirname(self.filename())
+
+            for f in os.listdir(d):
+                if not f.endswith(".metadata.callback"):
+                    continue
+
+                try:
+                    data = simplejson.loads(open(os.path.join(d, f), 'r').read())
+                    self.post_unreliable(data)
+                except Exception as e:
+                    traceback.print_exc()
+
+            time.sleep(10)
+
+# ------------------------------------------------------------
 
 class Handler(object):
     def __init__(self, server, metadata_watcher):
@@ -625,21 +657,20 @@ class Handler(object):
             data = {
                 "type": "finished",
                 "success": success,
+                "old-value": old_value,
+                "new-value": new_value,
+                "output": output,
             }
-            if new_value:
-                if 'output-file' in new_value:
-                    open(new_value['output-file'], 'w').write(simplejson.dumps(data) + '\n' + output)
-                if success and 'success-flag' in new_value:
-                    data['set-flag'] = new_value['success-flag']
-                if not success and 'failure-flag' in new_value:
-                    data['set-flag'] = new_value['failure-flag']
             self.post(data)
 
-    def post(self, data):
+    def post(self, data, unreliable=False):
         data.update({
             "handler": self.__class__.__name__,
         })
-        self.server.post_action(data)
+        if unreliable:
+            self.server.post_unreliable(data)
+        else:
+            self.server.post_reliable(data)
 
     @classmethod
     def run_helper(cls, cmd, output):
@@ -727,7 +758,7 @@ class HandlerLongCommand(HandlerAsync):
                 "type": "progress",
                 "cmd" : cmd,
                 "output": open(outfile.name, 'r').read(),
-            })
+            }, unreliable=True)
 
             retcode = p.poll()
             if retcode is not None:
@@ -783,6 +814,19 @@ class HandlerDiskBase(Handler):
         else:
             raise Exception("Disk with id %r not found on instance %r" % (
                 disk_id, self.metadata['instance.disks']))
+
+    def win_mount(self, _, value):
+        # Make the mount point if it doesn't exist
+        mnt = os.path.join(os.path.split(value['mount-point']))
+        if not os.path.exists(mnt):
+            subprocess.check("md %s" % mnt)
+
+        # Mount the directory
+        success &= (0 == self.run_helper("mountvol %s %s" % (
+            self.device(value['disk-id']), mnt), output))
+        
+
+
 
     def mount(self, _, value):
         assert 'mount-point' in value, value
@@ -899,10 +943,9 @@ if __name__ == "__main__":
     HandlerLongCommand(server, watcher)
     HandlerShutdown(server, watcher)
 
+    server.start()
+
     watcher.add_handler(".*", Printer)
     watcher.start()
     watcher.join()
-
-
-
 

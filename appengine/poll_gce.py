@@ -1,3 +1,7 @@
+#!/usr/bin/python
+#
+# -*- coding: utf-8 -*-
+# vim: set ts=4 sw=4 et sts=4 ai:
 
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
@@ -13,6 +17,7 @@ import time
 PAGE_TEMPLATE = """\
 <html>
   <head>
+    <meta http-equiv="refresh" content="30">
     <title>{}</title>
   </head>
   <body>
@@ -55,11 +60,11 @@ class ScheduleHandler(webapp2.RequestHandler):
   def get(self):
     start = time.time()
 
-    # Cron schedules us once per minute, so issue 6 tasks to get one per 10s.
-    for c in xrange(0, 60, 10):
+    for c in xrange(0, 60, 20):
         taskqueue.add(url='/poll_gce/do',
                       method='GET',
-                      countdown=c)
+                      countdown=c,
+                      queue_name='poll')
 
     result = PAGE_TEMPLATE.format(
         'poll_gce/schedule',
@@ -86,16 +91,16 @@ class PollGceHandler(webapp2.RequestHandler):
     memcache.set_multi({"gce_instances": instance_names,
                         "gce_disks": disk_names,
                         "gce_snapshots": snapshot_names },
-                       time=120)
+                       time=12000)
 
     for node in nodes:
-        Instance(node.name).update_from_gce(node)
+        Instance.load(node.name, gce_obj=node)
 
     for volume in volumes:
-        Disk(volume.name).update_from_gce(volume)
+        Disk.load(volume.name, gce_obj=volume)
 
     for snapshot in snapshots:
-        Snapshot(snapshot.name).update_from_gce(snapshot)
+        Snapshot.load(snapshot.name, gce_obj=snapshot)
 
     TaskletTimeLog.update_timers(driver)
 

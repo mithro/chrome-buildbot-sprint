@@ -12,14 +12,20 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
-- url: /start_instance/?
-  script: start_instance.APP
-
 - url: /poll_gce/.*
   script: poll_gce.APP
 
 - url: /callback(/.*)?
   script: callback.APP
+
+- url: /stage(/.*)
+  script: stage_status.APP
+
+- url: /cleanup(/.*)
+  script: stage_status.APP
+
+- url: /run_stages/?
+  script: run_stages.APP
 
 - url: /.*
   script: printenv.APP
@@ -28,4 +34,6 @@ libraries:
 - name: ssl
   version: latest
 - name: pycrypto
+  version: latest
+- name: jinja2
   version: latest

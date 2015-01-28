@@ -20,3 +20,7 @@ fi
 if [ ! -e keys/chrome-buildbot-sprint-c514ee5826d1.pem ]; then
 	echo "Need gce API key in keys/chrome-buildbot-sprint-c514ee5826d1.pem"
 fi
+
+if [ ! -e appengine/whoami ]; then
+	whoami > appengine/whoami
+fi
