@@ -21,14 +21,6 @@ import traceback
 import urllib
 import urllib2
 
-import tempfile
-outputfile = open(tempfile.mktemp(prefix="metadata_watcher.%s." % os.getpid(), suffix=".log"), 'w+', 100)
-sys.stdout.close()
-sys.stdout = outputfile
-sys.stderr.close()
-sys.stderr = outputfile
-sys.stdin.close()
-
 try:
     import simplejson
 except ImportError:
@@ -37,6 +29,33 @@ except ImportError:
 from multiprocessing.pool import ThreadPool
 
 METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
+
+
+
+def split_n_join(path):
+    """
+    >>> split_n_join('a/b/c')
+    ['a', 'b', 'c']
+    >>> 
+    >>> split_n_join('/a/b/c')
+    ['/', 'a', 'b', 'c']
+    >>> 
+    >>> split_n_join('c')
+    ['c']
+    >>> 
+    """
+    bits = []
+    head = path
+    while True:
+        head, tail = os.path.split(head)
+        bits.append(tail)
+        if head == '/':
+            bits.append('/')
+            break
+        if not head:
+            break
+    return bits[::-1]
+
 
 
 def compare(old, new, handler, name=""):
@@ -911,15 +930,6 @@ class HandlerDiskBase(Handler):
 
 
 
-class HandlerDiskWindows(HandlerDiskBase):
-    def really_mount(self, _, value):
-
-
-    def really_umount(self, _, value):
-
-
-class HandlerDiskLinux
-
 class HandlerMount(HandlerDiskBase):
     NAMESPACE = r"instance\.attributes\.mount\[\]"
     add = HandlerDiskBase.mount
@@ -978,6 +988,14 @@ def Printer(name, old_value, new_value):
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
+
+    import tempfile
+    outputfile = open(tempfile.mktemp(prefix="metadata_watcher.%s." % os.getpid(), suffix=".log"), 'w+', 100)
+    sys.stdout.close()
+    sys.stdout = outputfile
+    sys.stderr.close()
+    sys.stderr = outputfile
+    sys.stdin.close()
 
     watcher = MetadataWatcher()
     server = Server(watcher)
