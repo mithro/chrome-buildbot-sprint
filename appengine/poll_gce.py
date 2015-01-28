@@ -9,6 +9,7 @@ from google.appengine.api import taskqueue
 from objects import Instance
 from objects import Disk
 from objects import Snapshot
+from tasklet_time_log import TaskletTimeLog
 import libcloud_gae
 import webapp2
 import time
@@ -100,6 +101,8 @@ class PollGceHandler(webapp2.RequestHandler):
 
     for snapshot in snapshots:
         Snapshot.load(snapshot.name, gce_obj=snapshot)
+
+    TaskletTimeLog.update_timers()
 
     result = PAGE_TEMPLATE.format(
         'poll_gce/do',

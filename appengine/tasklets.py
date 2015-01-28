@@ -3,7 +3,9 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=2 sw=2 et sts=2 ai:
 
+import logging
 
+from tasklet_time_log import TaskletTimeLog
 from objects import *
 
 class Tasklet(object):
@@ -13,7 +15,8 @@ class Tasklet(object):
   def __repr_extra__(self):
     return ''
 
-  def __init__(self, tid):
+  def __init__(self, stage, tid):
+    self.stage = stage
     self.tid = tid
 
   def is_startable(self):
@@ -25,19 +28,25 @@ class Tasklet(object):
   def is_finished(self):
     raise NotImplementedError("%s.is_finished()" % self.__class__)
 
-  def run(self, driver):
-    raise NotImplementedError("%s.run()" % self.__class__)
-
   def can_run(self):
     return self.is_startable() and not self.is_finished() and not self.is_running()
+
+  def run(self, driver):
+    logging.debug('RUN: %s' % self.tid)
+    TaskletTimeLog.start_timer(self)
+    self._run(driver)
+
+  def _run(self, driver):
+    raise NotImplementedError("%s.run()" % self.__class__)
+
 
 
 class CreateXFromY(Tasklet):
   def __repr_extra__(self):
     return ' src=%s dst=%s' % (self.src, self.dst)
 
-  def __init__(self, tid, src, dst):
-    Tasklet.__init__(self, tid)
+  def __init__(self, stage, tid, src, dst):
+    Tasklet.__init__(self, stage, tid)
     self.src = src
     self.dst = dst
 
@@ -50,29 +59,30 @@ class CreateXFromY(Tasklet):
   def is_finished(self):
     return self.dst.ready()
 
-  def run(self, driver):
+
+  def _run(self, driver):
     assert self.src.exists()
     assert not self.dst.exists()
     self.dst.create(driver, self.src.name)
 
 
 class CreateDiskFromSnapshot(CreateXFromY):
-  def __init__(self, tid, source_snapshot, destination_disk):
+  def __init__(self, stage, tid, source_snapshot, destination_disk):
     assert isinstance(source_snapshot, Snapshot)
     assert isinstance(destination_disk, Disk)
-    CreateXFromY.__init__(self, tid, src=source_snapshot, dst=destination_disk)
+    CreateXFromY.__init__(self, stage, tid, src=source_snapshot, dst=destination_disk)
 
 
 class CreateSnapshotFromDisk(CreateXFromY):
-  def __init__(self, tid, source_disk, destination_snapshot):
+  def __init__(self, stage, tid, source_disk, destination_snapshot):
     assert isinstance(source_disk, Disk)
     assert isinstance(destination_snapshot, Snapshot)
-    CreateXFromY.__init__(self, tid, src=source_disk, dst=destination_snapshot)
+    CreateXFromY.__init__(self, stage, tid, src=source_disk, dst=destination_snapshot)
 
 
 class CreateInstance(Tasklet):
-  def __init__(self, tid, instance, required_snapshots):
-    Tasklet.__init__(self, tid)
+  def __init__(self, stage, tid, instance, required_snapshots):
+    Tasklet.__init__(self, stage, tid)
     self.instance = instance
     self.required_snapshots = required_snapshots
 
@@ -88,13 +98,13 @@ class CreateInstance(Tasklet):
   def is_finished(self):
     return self.instance.ready()
 
-  def run(self, driver):
+  def _run(self, driver):
     self.instance.create(driver)
 
 
 class AttachDiskToInstance(Tasklet):
-  def __init__(self, tid, instance, disk, mode):
-    Tasklet.__init__(self, tid)
+  def __init__(self, stage, tid, instance, disk, mode):
+    Tasklet.__init__(self, stage, tid)
     self.instance = instance
     self.disk = disk
     self.mode = mode
@@ -114,7 +124,8 @@ class AttachDiskToInstance(Tasklet):
   def is_finished(self):
     return self.instance.attached(self.disk)
 
-  def run(self, driver):
+
+  def _run(self, driver):
     assert self.instance.exists()
     assert self.instance.ready()
     assert self.disk.exists()
@@ -123,26 +134,23 @@ class AttachDiskToInstance(Tasklet):
 
 
 class DetachDiskFromInstance(AttachDiskToInstance):
-
-  def __init__(self, tid, instance, disk):
-    AttachDiskToInstance.__init__(self, tid, instance, disk, None)
+  def __init__(self, stage, tid, instance, disk):
+    AttachDiskToInstance.__init__(self, stage, tid, instance, disk, None)
 
   def is_finished(self):
     return not self.instance.attached(self.disk)
 
   # ----------------------------------------
 
-  def run(self, driver):
+  def _run(self, driver):
     self.instance.detach(driver, self.disk)
-
-      
 
 class MetadataTasklet(Tasklet):
   METADATA_KEY=None
   METADATA_RESULT=None
 
-  def __init__(self, tid, instance):
-    Tasklet.__init__(self, tid)
+  def __init__(self, stage, tid, instance):
+    Tasklet.__init__(self, stage, tid)
     self.instance = instance
 
   def _metadata_values(self):
@@ -190,7 +198,7 @@ class MetadataTasklet(Tasklet):
 
   # ----------------------------------------
 
-  def run(self, driver):
+  def _run(self, driver):
     metadata = self.instance.metadata
     if self.METADATA_KEY not in metadata:
       metadata[self.METADATA_KEY] = []
@@ -208,8 +216,8 @@ class MountDisksInInstance(MetadataTasklet):
   METADATA_RESULT='mount-result'
   HANDLER='HandlerMount'
 
-  def __init__(self, tid, instance, disks_and_mnts):
-    MetadataTasklet.__init__(self, tid, instance)
+  def __init__(self, stage, tid, instance, disks_and_mnts):
+    MetadataTasklet.__init__(self, stage, tid, instance)
     assert isinstance(disks_and_mnts, (list, tuple))
     self.disks_and_mnts = disks_and_mnts
 
@@ -243,8 +251,8 @@ class RunCommandOnInstance(MetadataTasklet):
   METADATA_RESULT='long-commands-result'
   HANDLER='HandlerLongCommand'
 
-  def __init__(self, tid, instance, command):
-    MetadataTasklet.__init__(self, tid, instance)
+  def __init__(self, stage, tid, instance, command):
+    MetadataTasklet.__init__(self, stage, tid, instance)
     self.command = command
     
   def _metadata_values(self):
@@ -259,7 +267,7 @@ class WaitOnOtherTasks(Tasklet):
     return " %s %s" % (self.task_to_run, self.tasks_to_wait_for)
 
   def __init__(self, task_to_run, tasks_to_wait_for):
-    Tasklet.__init__(self, task_to_run.tid)
+    Tasklet.__init__(self, task_to_run.stage, task_to_run.tid)
     self.task_to_run = task_to_run
     self.tasks_to_wait_for = tasks_to_wait_for
 
@@ -286,12 +294,12 @@ class WaitOnOtherTasks(Tasklet):
 
     return True
 
-  def run(self, driver):
+  def _run(self, driver):
     return self.task_to_run.run(driver)
 
 class CancelledByOtherTask(Tasklet):
   def __init__(self, task_to_run, task_indicating_finished):
-    Tasklet.__init__(self, task_to_run.tid)
+    Tasklet.__init__(self, task_to_run.stage, task_to_run.tid)
     self.task_to_run = task_to_run
     self.task_indicating_finished = task_indicating_finished
 
@@ -304,6 +312,6 @@ class CancelledByOtherTask(Tasklet):
   def is_finished(self):
     return self.task_to_run.is_finished() or self.task_indicating_finished.is_finished()
 
-  def run(self, driver):
+  def _run(self, driver):
     return self.task_to_run.run(driver)
 

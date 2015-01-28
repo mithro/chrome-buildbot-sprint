@@ -158,7 +158,7 @@ try:
   with PRINT_LOCK:
     print("SyncStage")
     print("-"*80)
-    for t in SyncStage(previous_commit, current_commit).tasklets():
+    for t in SyncStage(previous_commit, current_commit).tasklets:
       pretty_print_status(t)
 
     if raw_input("okay? [y] ") not in ('y', ''):
@@ -169,7 +169,7 @@ try:
   print
   print("BuildStage")
   print("-"*80)
-  for t in BuildStage(previous_commit, current_commit).tasklets():
+  for t in BuildStage(previous_commit, current_commit).tasklets:
     print(t)
     print(('startable', t.is_startable()), ('running', t.is_running()), ('done', t.is_finished()))
     print
@@ -179,7 +179,7 @@ try:
   while updater.is_alive():
     with PRINT_LOCK:
       print("-" * 80)
-      for t in SyncStage(previous_commit, current_commit).tasklets():
+      for t in SyncStage(previous_commit, current_commit).tasklets:
         pretty_print_status(t)
         if t.is_startable():
           if t.is_running():
