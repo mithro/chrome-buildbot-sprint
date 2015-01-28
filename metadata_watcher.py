@@ -696,7 +696,7 @@ class Handler(object):
             self.server.post_reliable(data)
 
     @classmethod
-    def run_helper(cls, cmd, output):
+    def run_helper(cls, cmd, output, with_output=False):
         output.append("="*80)
         output.append("Running: %r" % cmd)
         output.append("----")
@@ -705,10 +705,13 @@ class Handler(object):
         p = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, shell=True)
         retcode = p.wait()
         outfile.seek(0)
-        output.append(outfile.read())
+        cmd_output = outfile.read()
+        output.append(cmd_output)
         output.append("----")
         output.append("Completed with: %s" % retcode)
         output.append("="*80)
+        if with_output:
+            return retcode, cmd_output
         return retcode
 
     NAMESPACE = None
@@ -887,6 +890,10 @@ class HandlerDiskBase(Handler):
         # Get the directory in windows format.
         mnt = os.path.join(*path_split_all(value['mount-point']))
 
+        # HACK:
+        if os.path.exists(mnt):
+            return success, output
+
         # Make the directory which contains the mount point
         parent = os.path.split(mnt)[0]
         if not os.path.exists(parent):
@@ -910,11 +917,11 @@ class HandlerDiskBase(Handler):
         success = True
         found = False
 
-        self.run_helper("mountvol", output)
+        mnt = os.path.join(*path_split_all(value['mount-point']))
+        success &= (0 == self.run_helper("mountvol %s /L" % (mnt,), output))
+        success &= (0 == self.run_helper("mountvol %s /D" % (mnt,), output))
 
-        "mountvol %s /L"
-        "mountvol %s /D"
-        pass
+        return success, output
 
     #----------------------------
 
