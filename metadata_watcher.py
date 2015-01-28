@@ -762,22 +762,29 @@ class HandlerAsync(Handler):
 
 class HandlerLongCommand(HandlerAsync):
     NAMESPACE = r"instance\.attributes\.long-commands\[\]"
+
     def add(self, name, value, metadata=None):
         assert metadata is not None
         assert 'cmd' in value
         if isinstance(value['cmd'], unicode):
             value['cmd'] = value['cmd'].encode('utf-8')
-        if 'user' in value:
+        if 'user' in value and sys.platform != 'win32':
             cmd = "su %s -c %r" % (value['user'], value['cmd'])
         else:
             cmd = value['cmd']
+
         output = []
         output.append("="*80)
         output.append("Running: %r" % cmd)
         output.append("----")
         outfile = tempfile.NamedTemporaryFile(prefix="%s." % (self.__class__.__name__))
         print "Running %r and writing log to %r" % (cmd, outfile.name)
-        p = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, shell=True)
+        p = subprocess.Popen(
+            cmd,
+            stdout=outfile,
+            stderr=subprocess.STDOUT,
+            shell=True,
+            cwd=value.get('cwd', os.getcwd()))
 
         while True:
             self.post({
@@ -879,6 +886,11 @@ class HandlerDiskBase(Handler):
                 found = True
                 success &= (0 == self.run_helper("umount %s" % value['mount-point'], output))
 
+        # Make sure everything in on disk
+        self.run_helper("sync", output)
+        self.run_helper("sync", output)
+        self.run_helper("sync", output)
+
         return (found and success), output
 
     #----------------------------
@@ -920,6 +932,11 @@ class HandlerDiskBase(Handler):
         mnt = os.path.join(*path_split_all(value['mount-point']))
         success &= (0 == self.run_helper("mountvol %s /L" % (mnt,), output))
         success &= (0 == self.run_helper("mountvol %s /D" % (mnt,), output))
+
+        # Make sure everything in on disk
+        self.run_helper("sync", output)
+        self.run_helper("sync", output)
+        self.run_helper("sync", output)
 
         return success, output
 
