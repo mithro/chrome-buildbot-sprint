@@ -32,15 +32,15 @@ METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 
 
 
-def split_n_join(path):
+def path_split_all(path):
     """
-    >>> split_n_join('a/b/c')
+    >>> path_split_all('a/b/c')
     ['a', 'b', 'c']
     >>> 
-    >>> split_n_join('/a/b/c')
+    >>> path_split_all('/a/b/c')
     ['/', 'a', 'b', 'c']
     >>> 
-    >>> split_n_join('c')
+    >>> path_split_all('c')
     ['c']
     >>> 
     """
@@ -50,7 +50,10 @@ def split_n_join(path):
         head, tail = os.path.split(head)
         bits.append(tail)
         if head == '/':
-            bits.append('/')
+            if sys.platform == 'linux2':
+                bits.append('/')
+            elif sys.platform == 'win32':
+                bits.append('C:\\')
             break
         if not head:
             break
@@ -881,7 +884,7 @@ class HandlerDiskBase(Handler):
         output = []
 
         # Get the directory in windows format.
-        mnt = os.path.join(*split_n_join(value['mount-point']))
+        mnt = os.path.join(*path_split_all(value['mount-point']))
 
         # Make the directory which contains the mount point
         parent = os.path.join(os.path.split(mnt)[:-1])
@@ -991,11 +994,11 @@ if __name__ == "__main__":
 
     import tempfile
     outputfile = open(tempfile.mktemp(prefix="metadata_watcher.%s." % os.getpid(), suffix=".log"), 'w+', 100)
-    sys.stdout.close()
-    sys.stdout = outputfile
-    sys.stderr.close()
-    sys.stderr = outputfile
-    sys.stdin.close()
+    #sys.stdout.close()
+    #sys.stdout = outputfile
+    #sys.stderr.close()
+    #sys.stderr = outputfile
+    #sys.stdin.close()
 
     watcher = MetadataWatcher()
     server = Server(watcher)
