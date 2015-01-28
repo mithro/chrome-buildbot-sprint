@@ -241,7 +241,7 @@ class Instance(GCEObject):
   # ---------------------------------
 
   MACHINE_TYPE = 'n1-standard-2'
-  BOOT_IMAGE = 'boot-image-wip-2'
+  BOOT_IMAGE = 'boot-image-win-4'
   STARTUP_SCRIPT_URL = 'https://raw.githubusercontent.com/mithro/chrome-buildbot-sprint/master/metadata_watcher.py'
   WINDOWS_STARTUP_SCRIPT = 'windows-startup-script.ps1'
   TAGS = ('http-server',)

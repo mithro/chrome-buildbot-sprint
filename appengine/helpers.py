@@ -21,7 +21,7 @@ def Namespace():
   return NoDash(os.environ['USER'])
 
 def SnapshotName(commit, content):
-  return '-'.join([Namespace(), 'linux', NoDash(commit), 'snapshot', content])
+  return '-'.join([Namespace(), 'win', NoDash(commit), 'snapshot', content])
 
 import sys
 sys.path.append("third_party/python-dateutil-1.5")
