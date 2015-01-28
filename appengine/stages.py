@@ -85,11 +85,10 @@ class SyncStage(Stage):
     tasks.append(mount_task)
 
     run_task = WaitOnOtherTasks(
-        RunCommandOnInstance(sid+"-run", instance, ";".join(("""\
-export PATH=$PATH:/mnt/chromium/depot_tools
-cd /mnt/chromium/src
-time gclient sync -r %s
-""" % self.current_commit).split('\n'))),
+        RunCommandOnInstance(sid+"-run", instance,
+          "gclient sync -r %s" % self.current_commit,
+          cwd='/mnt/chromium/src',
+          user='ubuntu').split('\n'))),
         [mount_task])
     tasks.append(run_task)
 
