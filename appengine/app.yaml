@@ -27,6 +27,9 @@ handlers:
 - url: /run_stages/?
   script: run_stages.APP
 
+- url: /view_stages/?
+  script: view_stages.APP
+
 - url: /timeline/?
   script: timeline.APP
 
