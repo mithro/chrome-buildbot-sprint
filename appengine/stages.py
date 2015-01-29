@@ -21,7 +21,7 @@ from tasklets import (
   CancelledByOtherTask,
   AttachDiskToInstance,
   WaitOnOtherTasks,
-  RunCommandOnInstance,
+  RunCommandsOnInstance,
   UnmountDisksInInstance,
   DetachDiskFromInstance,
   CreateSnapshotFromDisk,
@@ -109,11 +109,11 @@ class SyncStage(Stage):
     tasks.append(mount_task)
 
     run_task = WaitOnOtherTasks(
-        RunCommandOnInstance(self, sid + "-run", instance, ";".join(("""\
-export PATH=$PATH:/mnt/chromium/depot_tools
-cd /mnt/chromium/src
-time gclient sync -r %s
-""" % self.current_commit).split('\n'))),
+        RunCommandsOnInstance(self, sid + "-run", instance, [
+            'export PATH=$PATH:/mnt/chromium/depot_tools',
+            'cd /mnt/chromium/src',
+            'time gclient sync -r %s' % self.current_commit,
+        ]),
         [mount_task])
     tasks.append(run_task)
 
@@ -171,12 +171,13 @@ class BuildStage(Stage):
     tasks.append(mount_task)
 
     run_task = WaitOnOtherTasks(
-      RunCommandOnInstance(self, sid + "-run", instance, """\
-export PATH=$PATH:/mnt/chromium/depot_tools;
-cd /mnt/chromium/src;
-time build/gyp_chromium;
-time ninja -C out/Debug;
-"""), [mount_task])
+      RunCommandsOnInstance(self, sid + "-run", instance, [
+        'export PATH=$PATH:/mnt/chromium/depot_tools',
+        'cd /mnt/chromium/src',
+        'time build/gyp_chromium',
+        'time ninja -C out/Debug',
+      ]),
+      [mount_task])
     tasks.append(run_task)
 
     umount_task = WaitOnOtherTasks(
@@ -253,19 +254,26 @@ class TestStage(Stage):
        ('out/Debug/%(test_binary)s --gtest_output="xml:/tmp/%(test_binary)s.xml"'
         % {'test_binary': self.TEST_BINARY}))
 
-    run_task = WaitOnOtherTasks(RunCommandOnInstance(self, sid + "-run", instance, """\
-export PATH=$PATH:/mnt/chromium/depot_tools;
-cd /mnt/chromium/src;
-sudo apt-get install xvfb -y;
-chromium/src/build/update-linux-sandbox.sh;
-export CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox;
-time %(command)s;
-""" % { 'command': command}), [mount_task])
+    run_task = WaitOnOtherTasks(
+      RunCommandsOnInstance(self, sid + "-run", instance, [
+        'export PATH=$PATH:/mnt/chromium/depot_tools',
+        'cd /mnt/chromium/src',
+        'sudo apt-get install xvfb -y',
+        'chromium/src/build/update-linux-sandbox.sh',
+        'export CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox',
+        'time %s' % command,
+      ]),
+      [mount_task])
     tasks.append(run_task)
 
-    upload_results_task = WaitOnOtherTasks(RunCommandOnInstance(self, sid + "-upload-results", instance, """\
-curl -d @/tmp/%(test_binary)s.xml -X POST http://delta-trees-830.appspot.com/test_results/%(test_run_id)s
-""" % { 'test_binary': self.TEST_BINARY, 'test_run_id': sid}), [run_task])
+    upload_results_task = WaitOnOtherTasks(
+      RunCommandsOnInstance(self, sid + "-upload-results", instance, [
+        'curl -d @/tmp/%(test_binary)s.xml -X POST http://delta-trees-830.appspot.com/test_results/%(test_run_id)s' % {
+          'test_binary': self.TEST_BINARY,
+          'test_run_id': sid,
+        },
+      ]),
+      [run_task])
     tasks.append(upload_results_task)
 
     umount_task = WaitOnOtherTasks(

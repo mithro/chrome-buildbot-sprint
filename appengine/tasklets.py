@@ -242,15 +242,15 @@ class UnmountDisksInInstance(MountDisksInInstance):
 
 
 
-class RunCommandOnInstance(MetadataTasklet):
+class RunCommandsOnInstance(MetadataTasklet):
   METADATA_KEY='long-commands'
   METADATA_RESULT='long-commands-result'
   HANDLER='HandlerLongCommand'
 
-  def __init__(self, stage, tid, instance, command):
+  def __init__(self, stage, tid, instance, commands):
     MetadataTasklet.__init__(self, stage, tid, instance)
-    self.command = command
-    
+    self.command = ';'.join(commands)
+
   def _metadata_values(self):
     return [{'cmd': self.command, 'user': 'ubuntu'}]
 
