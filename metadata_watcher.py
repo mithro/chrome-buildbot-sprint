@@ -787,7 +787,7 @@ class HandlerLongCommand(HandlerAsync):
         outfile = tempfile.NamedTemporaryFile(
             prefix="%s." % (self.__class__.__name__),
             suffix=".log",
-            mode='rw+b',
+            mode='rw+',
             delete=False)
         print "Running %r and writing log to %r" % (cmd, outfile.name)
         p = subprocess.Popen(
