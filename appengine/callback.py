@@ -46,9 +46,10 @@ class CallbackHandler(webapp2.RequestHandler):
     if tasklet_type:
       if tasklet_type.handle_callback(driver, instance, data['success'], data['old-value'], data['new-value']):
         result = 'OK'
+        logging.debug(result)
       else:
         result = 'REDUNDANT'
-      logging.info(result)
+        logging.info(result)
     else:
       result = 'MAYBE OK'
       logging.warn(result)

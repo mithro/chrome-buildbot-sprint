@@ -33,8 +33,8 @@ class Stage(object):
   def stage_id(self):
     return '-'.join([
       Namespace(),
+      'linux',
       self.current_commit,
-      "linux",
       self.name,
     ])
 
@@ -99,7 +99,7 @@ class SyncStage(Stage):
     self._outputs.append(snap_src)
 
     tasks = []
-    tasks.append(CreateInstance(self, sid + "-instance-create", instance, required_snapshots=[previous_snap_src]))
+    tasks.append(CreateInstance(self, sid + "-instance-create", instance, 'n1-standard-2', required_snapshots=[previous_snap_src]))
     tasks.append(CreateDiskFromSnapshot(self, sid + "-disk-src-create", previous_snap_src, disk_src))
     mount_task = MountDisksInInstance(self, sid + "-disk-mount", instance, [(disk_src, "/mnt/chromium")])
     attach_task = CancelledByOtherTask(
@@ -145,25 +145,39 @@ class BuildStage(Stage):
     instance = Instance.load("%s-instance" % sid)
     disk_src = Disk.load("%s-disk-src" % sid)
     disk_out = Disk.load("%s-disk-out" % sid)
-    snap_out = Snapshot.load(SnapshotName(self.current_commit, "src"))
+    snap_out = Snapshot.load(SnapshotName(self.current_commit, "out"))
+
+    self._inputs.append(current_snap_src)
+    self._objects.append(instance)
+    self._objects.append(disk_src)
+    self._objects.append(disk_out)
+    self._outputs.append(snap_out)
 
     tasks = []
-    tasks.append(CreateInstance(self, sid + "-instance-create", instance, required_snapshots=[current_snap_src, previous_snap_out]))
-    tasks.append(CreateDiskFromSnapshot(self, sid + "-disk-src-create", current_snap_src, disk_src))
-    tasks.append(AttachDiskToInstance(self, sid + "-disk-src-attach", instance, disk_src, 'READ_ONLY'))
-    tasks.append(CreateDiskFromSnapshot(self, sid + "-disk-out-create", previous_snap_out, disk_out))
-    tasks.append(AttachDiskToInstance(self, sid + "-disk-out-attach", instance, disk_out, 'READ_WRITE'))
+    tasks.append(CreateInstance(self, sid + "-instance-create", instance, 'n1-standard-16', required_snapshots=[current_snap_src]))
+    create_src_disk = CreateDiskFromSnapshot(self, sid + "-disk-src-create", current_snap_src, disk_src)
+    tasks.append(create_src_disk)
+    tasks.append(WaitOnOtherTasks(
+      CreateDiskFromSnapshot(self, sid + "-disk-out-create", previous_snap_out, disk_out),
+      [create_src_disk]))
 
     mount_task = MountDisksInInstance(self, sid + "-disk-mount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")])
+    tasks.append(CancelledByOtherTask(
+      AttachDiskToInstance(self, sid + "-disk-src-attach", instance, disk_src, 'READ_ONLY'),
+      mount_task))
+    tasks.append(CancelledByOtherTask(
+      AttachDiskToInstance(self, sid + "-disk-out-attach", instance, disk_out, 'READ_WRITE'),
+      mount_task))
     tasks.append(mount_task)
 
-    run_task = RunCommandOnInstance(self, sid + "-run", instance, """\
+    run_task = WaitOnOtherTasks(
+      RunCommandOnInstance(self, sid + "-run", instance, """\
 export PATH=$PATH:/mnt/chromium/depot_tools;
 cd /mnt/chromium/src;
 time build/gyp_chromium;
 time ninja -C out/Debug;
-""")
-    tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
+"""), [mount_task])
+    tasks.append(run_task)
 
     umount_task = WaitOnOtherTasks(
       UnmountDisksInInstance(self, sid + "-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]),
@@ -223,7 +237,7 @@ class TestStage(Stage):
     self._objects.append(disk_out)
 
     tasks = []
-    tasks.append(CreateInstance(self, sid + "-instance-create", instance, required_snapshots=[current_snap_src, current_snap_out]))
+    tasks.append(CreateInstance(self, sid + "-instance-create", instance, 'n1-standard-16', required_snapshots=[current_snap_src, current_snap_out]))
     tasks.append(CreateDiskFromSnapshot(self, sid + "-disk-src-create", current_snap_src, disk_src))
     tasks.append(AttachDiskToInstance(self, sid + "-disk-src-attach", instance, disk_src, 'READ_ONLY'))
     tasks.append(CreateDiskFromSnapshot(self, sid + "-disk-out-create", current_snap_out, disk_out))

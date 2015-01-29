@@ -81,9 +81,10 @@ class CreateSnapshotFromDisk(CreateXFromY):
 
 
 class CreateInstance(Tasklet):
-  def __init__(self, stage, tid, instance, required_snapshots):
+  def __init__(self, stage, tid, instance, machine_type, required_snapshots):
     Tasklet.__init__(self, stage, tid)
     self.instance = instance
+    self.machine_type = machine_type
     self.required_snapshots = required_snapshots
 
   def is_startable(self):
@@ -99,7 +100,7 @@ class CreateInstance(Tasklet):
     return self.instance.ready()
 
   def _run(self, driver):
-    self.instance.create(driver)
+    self.instance.create(driver, self.machine_type)
 
 
 class AttachDiskToInstance(Tasklet):
@@ -110,13 +111,7 @@ class AttachDiskToInstance(Tasklet):
     self.mode = mode
 
   def is_startable(self):
-    if not self.instance.exists() or not self.instance.ready():
-      return False
-
-    if not self.disk.exists() and self.disk.ready():
-      return False
-
-    return True
+    return self.instance.ready() and self.disk.ready()
 
   def is_running(self):
     return False
@@ -194,6 +189,7 @@ class MetadataTasklet(Tasklet):
 
     metadata[cls.METADATA_RESULT].append(new_value)
     instance.set_metadata(driver, {cls.METADATA_RESULT: metadata[cls.METADATA_RESULT]})
+    logging.debug('Added metadata to %s: %s' % (cls.METADATA_RESULT, new_value))
     return True
 
   # ----------------------------------------

@@ -245,10 +245,10 @@ class Instance(GCEObject):
   WINDOWS_STARTUP_SCRIPT = 'windows-startup-script.ps1'
   TAGS = ('http-server',)
 
-  def create(self, driver):
+  def create(self, driver, machine_type):
     self.update_from_gce(driver.create_node(
       self.name,
-      size=self.MACHINE_TYPE,
+      size=machine_type or self.MACHINE_TYPE,
       image=self.BOOT_IMAGE,
       ex_tags=self.TAGS,
       ex_metadata={'startup-script-url': self.STARTUP_SCRIPT_URL,
