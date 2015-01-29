@@ -659,7 +659,6 @@ class Handler(object):
                 "success": success,
                 "old-value": old_value,
                 "new-value": new_value,
-                "output": output,
             }
             self.post(data)
 
