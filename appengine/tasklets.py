@@ -251,7 +251,7 @@ class RunCommandOnInstance(MetadataTasklet):
     self.extra = kw
 
   def _metadata_values(self):
-    return [kw]
+    return [self.extra]
 
   def is_startable(self):
     return self.instance.ready()

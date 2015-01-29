@@ -5,11 +5,14 @@
 
 import copy
 import time
+import random
+import string
+import urllib2
+
 try:
   import simplejson
 except:
   import json as simplejson
-import urllib2
 
 try:
   from google.appengine.api import memcache
@@ -252,9 +255,9 @@ class Instance(GCEObject):
       image=self.BOOT_IMAGE,
       ex_tags=self.TAGS,
       ex_metadata={'startup-script-url': self.STARTUP_SCRIPT_URL,
-                   'windows-startup-script-ps1': self.WINDOWS_STARTUP_SCRIPT,
-                   'gce-initial-windows-user': 'ubuntu',
-                   'gce-initial-windows-password': ''.join([random.choice(string.ascii_letters) for u in range(20)]),
+                   'windows-startup-script-ps1': open(self.WINDOWS_STARTUP_SCRIPT).read(),
+                   'gce-initial-windows-user': 'delta-trees-830',
+                   'gce-initial-windows-password': ''.join([random.choice(string.ascii_letters) for u in range(8)]),
                    },
       ))
 
