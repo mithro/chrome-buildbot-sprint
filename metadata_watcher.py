@@ -704,7 +704,7 @@ class Handler(object):
         outfile = tempfile.NamedTemporaryFile(
             prefix="%s." % (cls.__name__),
             suffix=".log",
-            mode='rw',
+            mode='w',
             delete=False)
         print "Running %r and writing log to %r" % (cmd, outfile.name)
         p = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, shell=True)
@@ -787,7 +787,7 @@ class HandlerLongCommand(HandlerAsync):
         outfile = tempfile.NamedTemporaryFile(
             prefix="%s." % (self.__class__.__name__),
             suffix=".log",
-            mode='rw',
+            mode='w',
             delete=False)
         print "Running %r and writing log to %r" % (cmd, outfile.name)
         p = subprocess.Popen(
