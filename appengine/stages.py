@@ -222,9 +222,9 @@ class TestStage(Stage):
     shard_variables = ('GTEST_TOTAL_SHARDS=%(total)d GTEST_SHARD_INDEX=%(index)d '
                        % {'total': self.TOTAL_SHARDS, 'index': self.SHARD_INDEX})
     xvfb_command = 'xvfb-run --server-args=\'-screen 0, 1024x768x24\' '
-    command = shard_variables + xvfb_command +
+    command = (shard_variables + xvfb_command +
        ('out/Debug/%(test_binary)s --gtest_output="xml:/tmp/%(test_binary)s.xml"'
-        % {'test_binary': self.TEST_BINARY})
+        % {'test_binary': self.TEST_BINARY}))
 
     run_task = RunCommandOnInstance(self, sid + "-run", instance, """\
 export PATH=$PATH:/mnt/chromium/depot_tools;
@@ -235,6 +235,11 @@ export CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox;
 time %(command)s;
 """ % { 'command': command})
     tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
+
+    upload_results_task = RunCommandOnInstance(self, sid + "-upload-results", instance, """\
+curl -d @/tmp/%(test_binary)s.xml -X POST http://delta-trees-830.appspot.com/test_results/%(test_run_id)s
+""" % { 'test_binary': self.TEST_BINARY, 'test_run_id': sid})
+    tasks.append(WaitOnOtherTasks(upload_results_task, [run_task])
 
     umount_task = WaitOnOtherTasks(
       UnmountDisksInInstance(self, sid + "-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]),
