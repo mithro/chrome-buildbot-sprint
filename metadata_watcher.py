@@ -843,13 +843,6 @@ class HandlerDiskBase(Handler):
         success &= (0 == self.run_helper("mount %s %s" % (
             self.device(value['disk-id']), value['mount-point']), output))
 
-        # Chown the directory if needed
-        # Don't check for success incase the file system is read only.
-        # FIXME: Mark not successful if the ownership is wrong.
-        if 'user' in value:
-            self.run_helper("chown %s %s" % (
-                value['user'], value['mount-point']), output)
-
         success &= (0 == self.run_helper("ls -la %s" % (
             value['mount-point']), output))
 
