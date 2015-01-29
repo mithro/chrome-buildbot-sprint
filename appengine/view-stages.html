@@ -13,7 +13,7 @@ iframe {
 }
 </style>
 
-Stages in progress:<br>
+Showing only stages currently in progress:<br>
 {% for stage in stages %}
   <iframe src="/stage/{{ stage.name }}/previous-{{ stage.previous_commit }}/current-{{ stage.current_commit }}"></iframe>
 {% endfor %}
