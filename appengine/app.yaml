@@ -36,6 +36,9 @@ handlers:
 - url: /timeline/?
   script: timeline.APP
 
+- url: /clear_timers/?
+  script: clear_timers.APP
+
 - url: /.*
   script: printenv.APP
 
