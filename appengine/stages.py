@@ -239,7 +239,7 @@ time %(command)s;
     upload_results_task = RunCommandOnInstance(self, sid + "-upload-results", instance, """\
 curl -d @/tmp/%(test_binary)s.xml -X POST http://delta-trees-830.appspot.com/test_results/%(test_run_id)s
 """ % { 'test_binary': self.TEST_BINARY, 'test_run_id': sid})
-    tasks.append(WaitOnOtherTasks(upload_results_task, [run_task])
+    tasks.append(WaitOnOtherTasks(upload_results_task, [run_task]))
 
     umount_task = WaitOnOtherTasks(
       UnmountDisksInInstance(self, sid + "-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]),
