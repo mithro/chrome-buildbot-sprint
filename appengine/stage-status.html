@@ -4,7 +4,7 @@ vim: set ts=4 sw=4 et sts=4 ai syn=htmldjango:
 #}
 <html>
   <head>
-   <meta http-equiv="refresh" content="5">
+   <meta http-equiv="refresh" content="30">
   </head>
   <body {% if stage.is_finished() %}style="background-color: #778ed2;"{% endif %}>
 <style>
@@ -35,7 +35,7 @@ pre {
             <th>Running</th>
             <th>Finished</th>
         </tr>
-        {% for task in stage.tasklets() %}
+        {% for task in stage.tasklets %}
         <tr>
             <td>{{task.tid}}</td>
             <td {% if task.is_startable() %}style='background-color: green;'{%endif%}>

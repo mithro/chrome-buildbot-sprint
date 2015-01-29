@@ -32,12 +32,10 @@ def get_exception():
     return f.getvalue()
 
 class MainHandler(webapp2.RequestHandler):
-
     def get(self, stage_type, previous_commit, current_commit):
-
-    	stage = getattr(stages, '%sStage' % stage_type.title())(previous_commit, current_commit)
+        stage = getattr(stages, '%sStage' % stage_type.title())(previous_commit, current_commit)
         errors = []
-        for t in stage.tasklets():
+        for t in stage.tasklets:
             if t.tid == self.request.get('go', ''):
                 if not t.can_run():
                     errors.append("Skipping %s as it shouldn't run\n   (is_startable=%s, is_running=%s, is_finished=%s)" % (
@@ -45,11 +43,7 @@ class MainHandler(webapp2.RequestHandler):
                     continue
 
                 driver = libcloud_gae.new_driver()
-                try:
-                   t.run(driver)
-                except Exception, e:
-                   errors.append(str(e))
-                   errors.append(get_exception())
+                t.run(driver)
 
         self.response.out.write(TEMPLATE_STAGE.render(
             errors=errors,
@@ -63,10 +57,8 @@ class CleanupHandler(webapp2.RequestHandler):
         self.response.headers.add_header('Content-Type', 'text/plain')
         stage = getattr(stages, '%sStage' % stage_type.title())(previous_commit, current_commit)
         assert stage.needs_cleanup()
-
         driver = libcloud_gae.new_driver()
         stage.cleanup(driver)
-
 
 APP = webapp2.WSGIApplication([
     ('/stage/(.*)/previous-(.*)/current-(.*)', MainHandler),

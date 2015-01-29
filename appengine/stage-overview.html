@@ -3,36 +3,17 @@
 vim: set ts=4 sw=4 et sts=4 ai syn=htmldjango:
 #}
 <!DOCTYPE html>
-<head>
-  <meta http-equiv="refresh" content="60">
-</head>
+
+<meta http-equiv="refresh" content="60">
+
 <style>
 iframe {
   width: 700px;
   height: 400px;
 }
-.running-tasks {
-  position: absolute;
-  right: 0;
-  top: 0;
-}
 </style>
-<body>
-  <ul>
-    {% for stage in stages %}
-      <li>
-        <a href="{{ stage.url }}">
-        <iframe src="{{ stage.url }}"></iframe>
-        </a>
-      </li>
-    {% endfor %}
-  </ul>
-  <div class="running-tasks">
-    Things Started:
-    <ul>
-      {% for t in things_started %}
-        <li>{{ t }}</li>
-      {% endfor %}
-    </ul>
-  </div>
-</body>
+
+Stages in progress:<br>
+{% for stage in stages %}
+  <iframe src="/stage/sync/previous-{{ stage.previous_commit }}/current-{{ stage.current_commit }}"></iframe>
+{% endfor %}
