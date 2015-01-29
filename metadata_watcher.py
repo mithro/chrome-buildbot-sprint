@@ -603,7 +603,7 @@ Current project metadata:
     def get_data(self, data):
         data["post-time"] = time.time()
         data["instance-name"] = socket.gethostname()
-        #data["instance-information"] = self.metadata.metadata[""]
+        data["instance-information"] = self.metadata.metadata.get("instance", {})
         return simplejson.dumps(data)
 
     def post_reliable(self, data):
