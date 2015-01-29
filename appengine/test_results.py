@@ -4,7 +4,7 @@
 # vim: set ts=4 sw=4 et sts=4 ai:
 
 from google.appengine.ext import db
-
+from db_objects import TestResults
 import datetime
 import webapp2
 import time
@@ -46,13 +46,6 @@ POST_RESPONSE_TEMPLATE = """\
   <pre>{}</pre>
 </body></html>)
 """
-
-
-
-class TestResults(db.Model):
-  """|key_name| is the test run id."""
-  xml_data = db.StringProperty()
-  timestamp = db.DateTimeProperty()
 
 
 class TestResultsHandler(webapp2.RequestHandler):

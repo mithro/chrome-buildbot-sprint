@@ -188,6 +188,16 @@ time ninja -C out/Debug;
     return tasks
 
 
+from google.appengine.ext import db
+from db_objects import TestResults
+
+class TestResultsUploadedObject:
+  def __init__(self, path):
+    self._path = path
+
+  def ready(self):
+    return TestResults.get_by_key_name(self._path) != None
+
 class TestStage(Stage):
   TEST_BINARY = 'unit_tests'
   TOTAL_SHARDS = 1
@@ -197,7 +207,7 @@ class TestStage(Stage):
     sid = self.stage_id
 
     self._inputs = []
-    self._outputs = []
+    self._outputs = [TestResultsUploadedObject(sid)]
     self._objects = []
 
     current_snap_src = Snapshot.load(SnapshotName(self.current_commit, "src"))
@@ -229,25 +239,25 @@ class TestStage(Stage):
        ('out/Debug/%(test_binary)s --gtest_output="xml:/tmp/%(test_binary)s.xml"'
         % {'test_binary': self.TEST_BINARY}))
 
-    run_task = RunCommandOnInstance(self, sid + "-run", instance, """\
+    run_task = WaitOnOtherTasks(RunCommandOnInstance(self, sid + "-run", instance, """\
 export PATH=$PATH:/mnt/chromium/depot_tools;
 cd /mnt/chromium/src;
 sudo apt-get install xvfb -y;
 chromium/src/build/update-linux-sandbox.sh;
 export CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox;
 time %(command)s;
-""" % { 'command': command})
-    tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
+""" % { 'command': command}), [mount_task])
+    tasks.append(run_task)
 
-    upload_results_task = RunCommandOnInstance(self, sid + "-upload-results", instance, """\
+    upload_results_task = WaitOnOtherTasks(RunCommandOnInstance(self, sid + "-upload-results", instance, """\
 curl -d @/tmp/%(test_binary)s.xml -X POST http://delta-trees-830.appspot.com/test_results/%(test_run_id)s
-""" % { 'test_binary': self.TEST_BINARY, 'test_run_id': sid})
-    tasks.append(WaitOnOtherTasks(upload_results_task, [run_task]))
+""" % { 'test_binary': self.TEST_BINARY, 'test_run_id': sid}), [run_task])
+    tasks.append(upload_results_task)
 
     umount_task = WaitOnOtherTasks(
       UnmountDisksInInstance(self, sid + "-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]),
       [run_task])
-    tasks.append(unmount_task)
+    tasks.append(umount_task)
 
     detach_src_task = WaitOnOtherTasks(
       DetachDiskFromInstance(self, sid + "-disk-src-detach", instance, disk_src),
