@@ -252,7 +252,10 @@ class Instance(GCEObject):
       image=self.BOOT_IMAGE,
       ex_tags=self.TAGS,
       ex_metadata={'startup-script-url': self.STARTUP_SCRIPT_URL,
-                   'windows-startup-script-ps1': self.WINDOWS_STARTUP_SCRIPT},
+                   'windows-startup-script-ps1': self.WINDOWS_STARTUP_SCRIPT,
+                   'gce-initial-windows-user': 'ubuntu',
+                   'gce-initial-windows-password': ''.join([random.choice(string.ascii_letters) for u in range(20)]),
+                   },
       ))
 
   def attach(self, driver, disk, mode):
