@@ -121,7 +121,6 @@ class GCEObject(dict):
 
   def destroy(self, driver):
     assert self.exists()
-    assert self.ready()
     try:
       self._gce_obj_destory(driver, self._gce_obj_get(driver, self.name))
     except ResourceNotFoundError:
