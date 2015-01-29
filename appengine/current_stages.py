@@ -10,7 +10,7 @@ def get_current_stages():
   previous_commit = base_commit
   current_stages = []
   for current_commit in COMMIT_LIST[1:]:
-    # current_stages.append(stages.SyncStage(previous_commit, current_commit))
+    current_stages.append(stages.SyncStage(previous_commit, current_commit))
     current_stages.append(stages.BuildStage(base_commit, current_commit))
     previous_commit = current_commit
   return current_stages

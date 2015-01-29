@@ -181,7 +181,7 @@ class BuildStage(Stage):
     tasks.append(run_task)
 
     umount_task = WaitOnOtherTasks(
-      UnmountDisksInInstance(self, sid + "-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]),
+      UnmountDisksInInstance(self, sid + "-disk-umount", instance, [(disk_out, "/mnt/chromium/src/out"), (disk_src, "/mnt/chromium")]),
       [run_task])
     tasks.append(umount_task)
 

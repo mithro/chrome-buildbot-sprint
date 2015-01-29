@@ -5,7 +5,7 @@ import webapp2
 from current_stages import get_current_stages
 
 
-TEMPLATE_STAGE = jinja2.Template(open(os.path.join(os.path.dirname(__file__), 'stage-overview.html')).read())
+TEMPLATE_STAGE = jinja2.Template(open(os.path.join(os.path.dirname(__file__), 'view-stages.html')).read())
 
 
 class ViewStagesHandler(webapp2.RequestHandler):
