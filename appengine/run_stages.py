@@ -21,7 +21,7 @@ class RunStagesHandler(webapp2.RequestHandler):
     for stage in get_current_stages():
       if stage.needs_cleanup():
         taskqueue.add(
-            url='/cleanup/sync/previous-%s/current-%s' % (stage.previous_commit, stage.current_commit),
+            url='/cleanup/%s/previous-%s/current-%s' % (stage.name, stage.previous_commit, stage.current_commit),
             method='GET',
             queue_name='run',
         )
@@ -29,7 +29,7 @@ class RunStagesHandler(webapp2.RequestHandler):
       elif not stage.is_finished():
         for tasklet in stage.tasklets:
           if tasklet.can_run():
-            stage_url = '/stage/sync/previous-%s/current-%s' % (stage.previous_commit, stage.current_commit)
+            stage_url = '/stage/%s/previous-%s/current-%s' % (stage.name, stage.previous_commit, stage.current_commit)
             taskqueue.add(
                 url='%s?go=%s' % (stage_url, tasklet.tid),
                 method='GET',

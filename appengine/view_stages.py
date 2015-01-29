@@ -10,12 +10,18 @@ TEMPLATE_STAGE = jinja2.Template(open(os.path.join(os.path.dirname(__file__), 's
 
 class ViewStagesHandler(webapp2.RequestHandler):
   def get(self):
-    stages = get_current_stages()
-    for i, stage in enumerate(stages):
-      if not stage.is_finished():
-        break
-    self.response.out.write(TEMPLATE_STAGE.render(stages=stages[max(i-1, 0):i+1]))
-
+    self.response.out.write(
+      TEMPLATE_STAGE.render(
+        stages=[
+          stage
+          for stage in get_current_stages()
+          if not stage.is_finished() and any(
+            tasklet.is_startable() or tasklet.is_running() or tasklet.is_finished()
+            for tasklet in stage.tasklets
+          )
+        ]
+      )
+    )
 
 APP = webapp2.WSGIApplication([
   ('/view_stages/?', ViewStagesHandler),

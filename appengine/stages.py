@@ -35,13 +35,20 @@ class Stage(object):
       Namespace(),
       self.current_commit,
       "linux",
-      self.__class__.__name__.lower().replace('stage', ''),
+      self.name,
     ])
 
   def __init__(self, previous_commit, current_commit):
     self.current_commit = current_commit
     self.previous_commit = previous_commit
+    self._inputs = []
+    self._outputs = []
+    self._objects = []
     self.tasklets = self._tasklets()
+
+  @property
+  def name(self):
+    return self.__class__.__name__.replace('Stage', '').lower()
 
   def _tasklets(self):
     raise NotImplementedError()
@@ -79,10 +86,6 @@ class SyncStage(Stage):
 
   def _tasklets(self):
     sid = self.stage_id
-
-    self._inputs = []
-    self._outputs = []
-    self._objects = []
 
     previous_snap_src = Snapshot.load(SnapshotName(self.previous_commit, "src"))
     self._inputs.append(previous_snap_src)
@@ -165,7 +168,7 @@ time ninja -C out/Debug;
     umount_task = WaitOnOtherTasks(
       UnmountDisksInInstance(self, sid + "-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]),
       [run_task])
-    tasks.append(unmount_task)
+    tasks.append(umount_task)
 
     detach_src_task = WaitOnOtherTasks(
       DetachDiskFromInstance(self, sid + "-disk-src-detach", instance, disk_src),

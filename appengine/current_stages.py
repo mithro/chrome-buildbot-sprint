@@ -15,7 +15,7 @@ def get_current_stages():
   return current_stages
 
 COMMIT_LIST = (
-  '32cbfaa6478f66b9', # Tue Jan 20 04:39:50 2015 +0000
+  'fa1651193bf94120', # Tue Jan 20 04:13:51 2015 +0000
   '4108ce09f9ead01f', # Wed Jan 21 00:06:33 2015 +0000
   '4220eea6d0c7ffa9', # Wed Jan 21 00:21:22 2015 +0000
   'a9f61f02eb555b0b', # Wed Jan 21 00:23:12 2015 +0000
