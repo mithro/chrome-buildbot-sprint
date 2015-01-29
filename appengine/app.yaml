@@ -30,6 +30,12 @@ handlers:
 - url: /test_results/.*
   script: test_results.APP
 
+- url: /view_stages/?
+  script: view_stages.APP
+
+- url: /timeline/?
+  script: timeline.APP
+
 - url: /.*
   script: printenv.APP
 
