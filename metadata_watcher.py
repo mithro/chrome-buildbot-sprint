@@ -704,7 +704,7 @@ class Handler(object):
         outfile = tempfile.NamedTemporaryFile(
             prefix="%s." % (cls.__name__),
             suffix=".log",
-            mode='rw+b',
+            mode='rw+',
             delete=False)
         print "Running %r and writing log to %r" % (cmd, outfile.name)
         p = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, shell=True)
