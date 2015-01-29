@@ -785,7 +785,7 @@ class HandlerLongCommand(HandlerAsync):
         output.append("Running: %r" % cmd)
         output.append("----")
         outfile = tempfile.NamedTemporaryFile(
-            prefix="%s." % (cls.__name__),
+            prefix="%s." % (self.__class__.__name__),
             suffix=".log",
             mode='rw+b',
             delete=False)
