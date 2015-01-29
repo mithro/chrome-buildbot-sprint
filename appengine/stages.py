@@ -17,6 +17,7 @@ from objects import (
 from tasklets import (
   CreateInstance,
   CreateDiskFromSnapshot,
+  CreateDiskFromContentSnapshot,
   MountDisksInInstance,
   CancelledByOtherTask,
   AttachDiskToInstance,
@@ -140,7 +141,6 @@ class BuildStage(Stage):
     sid = self.stage_id
 
     current_snap_src = Snapshot.load(SnapshotName(self.current_commit, "src"))
-    previous_snap_out = Snapshot.load(SnapshotName(self.previous_commit, "out"))
 
     instance = Instance.load("%s-instance" % sid)
     disk_src = Disk.load("%s-disk-src" % sid)
@@ -158,7 +158,7 @@ class BuildStage(Stage):
     create_src_disk = CreateDiskFromSnapshot(self, sid + "-disk-src-create", current_snap_src, disk_src)
     tasks.append(create_src_disk)
     tasks.append(WaitOnOtherTasks(
-      CreateDiskFromSnapshot(self, sid + "-disk-out-create", previous_snap_out, disk_out),
+      CreateDiskFromContentSnapshot(self, sid + "-disk-out-create", self.current_commit, 'out', disk_out),
       [create_src_disk]))
 
     mount_task = MountDisksInInstance(self, sid + "-disk-mount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")])

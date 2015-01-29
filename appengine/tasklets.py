@@ -7,6 +7,7 @@ import logging
 
 from tasklet_time_log import TaskletTimeLog
 from objects import *
+from helpers import SnapshotName
 
 class Tasklet(object):
   def __repr__(self):
@@ -71,6 +72,22 @@ class CreateDiskFromSnapshot(CreateXFromY):
     assert isinstance(source_snapshot, Snapshot)
     assert isinstance(destination_disk, Disk)
     CreateXFromY.__init__(self, stage, tid, src=source_snapshot, dst=destination_disk)
+
+
+class CreateDiskFromContentSnapshot(CreateXFromY):
+  def __init__(self, stage, tid, current_commit, content, destination_disk):
+    assert isinstance(destination_disk, Disk)
+    # FIXME: Hacky hacks to find the closest past out snapshot.
+    from current_stages import COMMIT_LIST
+    for commit in reversed(COMMIT_LIST[:COMMIT_LIST.index(current_commit)]):
+      source_snapshot = Snapshot.load(SnapshotName(commit, content))
+      if source_snapshot.ready():
+        break
+    CreateXFromY.__init__(self, stage, tid, src=source_snapshot, dst=destination_disk)
+
+  def _run(self, driver):
+    logging.debug('Using %s to create %s' % (self.src.name, self.dst.name))
+    CreateXFromY._run(self, driver)
 
 
 class CreateSnapshotFromDisk(CreateXFromY):

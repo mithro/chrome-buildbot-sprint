@@ -3,20 +3,18 @@ import objects
 import stages
 
 def get_current_stages():
-  base_commit = COMMIT_LIST[0]
-  base_snapshot_name = helpers.SnapshotName(base_commit, "src")
+  previous_commit = COMMIT_LIST[0]
+  base_snapshot_name = helpers.SnapshotName(previous_commit, "src")
   assert objects.Snapshot.load(base_snapshot_name).ready(), '%s must exist' % base_snapshot_name
 
-  previous_commit = base_commit
   current_stages = []
   for current_commit in COMMIT_LIST[1:]:
     current_stages.append(stages.SyncStage(previous_commit, current_commit))
-    current_stages.append(stages.BuildStage(base_commit, current_commit))
+    current_stages.append(stages.BuildStage(None, current_commit))
     previous_commit = current_commit
   return current_stages
 
 COMMIT_LIST = (
-  'fa1651193bf94120', # Tue Jan 20 04:13:51 2015 +0000
   '4108ce09f9ead01f', # Wed Jan 21 00:06:33 2015 +0000
   '4220eea6d0c7ffa9', # Wed Jan 21 00:21:22 2015 +0000
   # 'a9f61f02eb555b0b', # Wed Jan 21 00:23:12 2015 +0000
