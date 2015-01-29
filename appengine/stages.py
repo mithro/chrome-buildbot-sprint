@@ -185,3 +185,70 @@ time ninja -C out/Debug;
     return tasks
 
 
+class TestStage(Stage):
+  TEST_BINARY = 'unit_tests'
+  TOTAL_SHARDS = 1
+  SHARD_INDEX = 0
+
+  def _tasklets(self):
+    sid = self.stage_id
+
+    self._inputs = []
+    self._outputs = []
+    self._objects = []
+
+    current_snap_src = Snapshot.load(SnapshotName(self.current_commit, "src"))
+    self._inputs.append(current_snap_src)
+    current_snap_out = Snapshot.load(SnapshotName(self.current_commit, "out"))
+    self._inputs.append(current_snap_out)
+
+    instance = Instance.load("%s-instance" % sid)
+    self._objects.append(instance)
+    disk_src = Disk.load("%s-disk-src" % sid)
+    self._objects.append(disk_src)
+    disk_out = Disk.load("%s-disk-out" % sid)
+    self._objects.append(disk_out)
+
+    tasks = []
+    tasks.append(CreateInstance(self, sid + "-instance-create", instance, required_snapshots=[current_snap_src, current_snap_out]))
+    tasks.append(CreateDiskFromSnapshot(self, sid + "-disk-src-create", current_snap_src, disk_src))
+    tasks.append(AttachDiskToInstance(self, sid + "-disk-src-attach", instance, disk_src, 'READ_ONLY'))
+    tasks.append(CreateDiskFromSnapshot(self, sid + "-disk-out-create", current_snap_out, disk_out))
+    tasks.append(AttachDiskToInstance(self, sid + "-disk-out-attach", instance, disk_out, 'READ_ONLY'))
+
+    mount_task = MountDisksInInstance(self, sid + "-disk-mount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")])
+    tasks.append(mount_task)
+
+    shard_variables = ('GTEST_TOTAL_SHARDS=%(total)d GTEST_SHARD_INDEX=%(index)d '
+                       % {'total': self.TOTAL_SHARDS, 'index': self.SHARD_INDEX})
+    xvfb_command = 'xvfb-run --server-args=\'-screen 0, 1024x768x24\' '
+    command = shard_variables + xvfb_command +
+       ('out/Debug/%(test_binary)s --gtest_output="xml:/tmp/%(test_binary)s.xml"'
+        % {'test_binary': self.TEST_BINARY})
+
+    run_task = RunCommandOnInstance(self, sid + "-run", instance, """\
+export PATH=$PATH:/mnt/chromium/depot_tools;
+cd /mnt/chromium/src;
+sudo apt-get install xvfb -y;
+chromium/src/build/update-linux-sandbox.sh;
+export CHROME_DEVEL_SANDBOX=/usr/local/sbin/chrome-devel-sandbox;
+time %(command)s;
+""" % { 'command': command})
+    tasks.append(WaitOnOtherTasks(run_task, [mount_task]))
+
+    umount_task = WaitOnOtherTasks(
+      UnmountDisksInInstance(self, sid + "-disk-umount", instance, [(disk_src, "/mnt/chromium"), (disk_out, "/mnt/chromium/src/out")]),
+      [run_task])
+    tasks.append(unmount_task)
+
+    detach_src_task = WaitOnOtherTasks(
+      DetachDiskFromInstance(self, sid + "-disk-src-detach", instance, disk_src),
+      [umount_task])
+    tasks.append(detach_src_task)
+
+    detach_out_task = WaitOnOtherTasks(
+      DetachDiskFromInstance(self, sid + "-disk-out-detach", instance, disk_out),
+      [umount_task])
+    tasks.append(detach_out_task)
+
+    return tasks
