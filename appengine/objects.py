@@ -172,6 +172,17 @@ class Snapshot(GCEObject):
 
 
 
+def gen_win_password():
+  upper = [random.choice(string.ascii_uppercase) for u in range(4)]
+  lower = [random.choice(string.ascii_lowercase) for u in range(4)]
+  digits = [random.choice("1234567890") for u in range(2)]
+  non = [random.choice("""~!@#$%^&*_-+=`|\(){}[]:;",.?/""") for u in range(2)]
+  allchars = upper+lower+digits+non
+  random.shuffle(allchars)
+  return ''.join(allchars)
+
+
+
 class Instance(GCEObject):
   # Functions to get/destroy stuff on gce
   @staticmethod
@@ -257,7 +268,7 @@ class Instance(GCEObject):
       ex_metadata={'startup-script-url': self.STARTUP_SCRIPT_URL,
                    'windows-startup-script-ps1': open(self.WINDOWS_STARTUP_SCRIPT).read(),
                    'gce-initial-windows-user': 'delta-trees-830',
-                   'gce-initial-windows-password': ''.join([random.choice(string.ascii_letters) for u in range(8)]),
+                   'gce-initial-windows-password': gen_win_password(),
                    },
       ))
 

@@ -603,6 +603,7 @@ Current project metadata:
     def get_data(self, data):
         data["post-time"] = time.time()
         data["instance-name"] = socket.gethostname()
+        #data["instance-information"] = self.metadata.metadata[""]
         return simplejson.dumps(data)
 
     def post_reliable(self, data):
@@ -700,7 +701,10 @@ class Handler(object):
         output.append("="*80)
         output.append("Running: %r" % cmd)
         output.append("----")
-        outfile = tempfile.NamedTemporaryFile(prefix="%s." % (cls.__name__))
+        outfile = tempfile.NamedTemporaryFile(
+            prefix="%s." % (cls.__name__),
+            suffix=".log",
+            mode='rw+b', delete=False)
         print "Running %r and writing log to %r" % (cmd, outfile.name)
         p = subprocess.Popen(cmd, stdout=outfile, stderr=subprocess.STDOUT, shell=True)
         retcode = p.wait()
@@ -1023,11 +1027,11 @@ if __name__ == "__main__":
 
     import tempfile
     outputfile = open(tempfile.mktemp(prefix="metadata_watcher.%s." % os.getpid(), suffix=".log"), 'w+', 100)
-    #sys.stdout.close()
-    #sys.stdout = outputfile
-    #sys.stderr.close()
-    #sys.stderr = outputfile
-    #sys.stdin.close()
+    sys.stdout.close()
+    sys.stdout = outputfile
+    sys.stderr.close()
+    sys.stderr = outputfile
+    sys.stdin.close()
 
     watcher = MetadataWatcher()
     server = Server(watcher)
