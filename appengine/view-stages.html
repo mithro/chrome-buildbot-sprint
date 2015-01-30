@@ -27,5 +27,6 @@ iframe {
     <a href="/stage/{{ stage.name }}/previous-{{ stage.previous_commit }}/current-{{ stage.current_commit }}">{{ stage.stage_id }}</a><br>
   {% endfor %}
 {% else %}
-  No experiment underway, start a new experiment <a href="/start_experiment">here</a>.
+  No experiment underway.<br>
+  <a href="/start_experiment">Start a new experiment</a>.
 {% endif %}

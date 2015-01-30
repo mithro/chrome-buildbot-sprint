@@ -12,7 +12,7 @@ class StartExperimentHandler(webapp2.RequestHandler):
     if not experiment:
       self.response.write('Start new experiment?<br>')
     else:
-      self.response.write('Restart current experiment (%dm left)?<br>' % experiment.remaining_minutes())
+      self.response.write('Restart current experiment (%.2f hours left)?<br>' % experiment.remaining_hours())
     self.response.write('<form method="POST"><input type="submit"></input></form>')
 
   def post(self):
