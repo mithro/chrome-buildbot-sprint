@@ -16,9 +16,10 @@ def get_current_stages():
   base_snapshot_name = helpers.SnapshotName(previous_commit, "src")
   assert objects.Snapshot.load(base_snapshot_name).ready(), '%s must exist' % base_snapshot_name
 
-
   current_stages = []
   for current_commit, commit_time in COMMIT_LIST[1:]:
+    logging.debug('commit: %s' % (commit_time - COMMIT_LIST_START))
+    logging.debug('elapsed: %s' % experiment.elapsed())
     if commit_time - COMMIT_LIST_START > experiment.elapsed():
       break
     current_stages.append(stages.SyncStage(previous_commit, current_commit))

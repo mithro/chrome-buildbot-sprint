@@ -3,7 +3,6 @@
 # -*- coding: utf-8 -*-
 # vim: set ts=4 sw=4 et sts=4 ai:
 
-from google.appengine.api import memcache
 from google.appengine.api import taskqueue
 
 from objects import Instance
@@ -13,6 +12,8 @@ from tasklet_time_log import TaskletTimeLog
 import libcloud_gae
 import webapp2
 import time
+
+from cache import CACHE
 
 PAGE_TEMPLATE = """\
 <html>
@@ -88,10 +89,9 @@ class PollGceHandler(webapp2.RequestHandler):
     disk_names = [d.name for d in volumes]
     snapshot_names = [s.name for s in snapshots]
 
-    memcache.set_multi({"gce_instances": instance_names,
-                        "gce_disks": disk_names,
-                        "gce_snapshots": snapshot_names },
-                       time=3600)
+    CACHE.set('gce_instances', instance_names, time=60)
+    CACHE.set('gce_disks', disk_names, time=60)
+    CACHE.set('gce_snapshots', snapshot_names, time=60)
 
     for node in nodes:
         Instance.load(node.name, gce_obj=node)
@@ -117,9 +117,9 @@ class PollGceHandler(webapp2.RequestHandler):
 class ReadMemcacheHandler(webapp2.RequestHandler):
   def get(self):
     start = time.time()
-    instance_names = memcache.get("gce_instances")
-    disk_names = memcache.get("gce_disks")
-    snapshot_names = memcache.get("gce_snapshots")
+    instance_names = CACHE.get("gce_instances")
+    disk_names = CACHE.get("gce_disks")
+    snapshot_names = CACHE.get("gce_snapshots")
 
     result = PAGE_TEMPLATE.format(
         'poll_gce/memcache',
@@ -143,7 +143,7 @@ class ReadMemcacheEntityHandler(webapp2.RequestHandler):
         key,
         'memcache: ' + key,
         time.time() - start,
-        memcache.get(key),
+        CACHE.get(key),
     )
 
     self.response.write(result)

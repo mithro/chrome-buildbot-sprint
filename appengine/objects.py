@@ -10,6 +10,7 @@ try:
 except:
   import json as simplejson
 import urllib2
+import logging
 
 from cache import CACHE
 
@@ -58,6 +59,7 @@ class GCEObject(dict):
     self.name = gce_obj.name
     self.create_time = parse_time(gce_obj.extra['creationTimestamp'])
     self.status = self._gce_obj_status(gce_obj)
+    logging.debug('Updating %s status to %s.' % (self.name, self.status))
 
   # ---------------------------------
   _sentinal = []
@@ -82,7 +84,7 @@ class GCEObject(dict):
     return obj
 
   def store(self):
-    CACHE.set(self._cache_key(), self, time=12000)
+    CACHE.set(self._cache_key(), self, time=60)
 
   def __init__(self, name, sentinal=None):
     assert sentinal is self._sentinal
