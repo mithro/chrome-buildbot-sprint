@@ -33,19 +33,15 @@ def start_time_sorted(query):
 class TimelineHandler(webapp2.RequestHandler):
   def get(self):
     experiment = get_current_experiment()
-    if experiment:
-      duration = experiment.elapsed()
-    else:
-      duration = timedelta(hours=VIEW_HOURS)
+    hours = experiment.elapsed_hours() if experiment else VIEW_HOURS
     now = datetime.utcnow()
     timers = start_time_sorted(TaskletTimer.query())
     durations = start_time_sorted(TaskletDuration.query().filter(
-      TaskletDuration.stop_time >= now - duration,
+      TaskletDuration.stop_time >= now - timedelta(hours=hours),
     ))
     self.response.write(TEMPLATE % {
       'current_time': now,
       'running_tasklets': ''.join(' - %s %s (%ds)\n' % (timer.start_time, timer.tid(), (now - timer.start_time).total_seconds()) for timer in timers),
       'completed_tasklets': ''.join(' - %s %s (%ds)\n' % (duration.start_time, duration.tid, duration.seconds) for duration in durations),
-      'duration': duration.total_seconds() / 3600,
+      'duration': hours,
     })
-

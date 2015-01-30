@@ -16,11 +16,11 @@ class Experiment(ndb.Model):
   def elapsed(self):
     return datetime.utcnow() - self.start_time
 
-  def elapsed_minutes(self):
-    return int(self.elapsed().total_seconds() / 60)
+  def elapsed_hours(self):
+    return self.elapsed().total_seconds() / 3600
 
-  def remaining_minutes(self):
-    return int((self.stop_time - datetime.utcnow()).total_seconds() / 60)
+  def remaining_hours(self):
+    return (self.stop_time - datetime.utcnow()).total_seconds() / 3600
 
 
 def get_current_experiment():
