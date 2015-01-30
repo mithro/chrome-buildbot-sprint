@@ -5,7 +5,11 @@
 
 import logging
 
-from tasklet_time_log import TaskletTimeLog
+try:
+  from tasklet_time_log import TaskletTimeLog
+except ImportError:
+  TaskletTimeLog = None
+
 from objects import *
 from helpers import SnapshotName
 
@@ -34,7 +38,8 @@ class Tasklet(object):
 
   def run(self, driver):
     logging.debug('RUN: %s' % self.tid)
-    TaskletTimeLog.start_timer(self)
+    if TaskletTimeLog:
+      TaskletTimeLog.start_timer(self)
     self._run(driver)
 
   def _run(self, driver):

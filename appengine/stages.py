@@ -79,6 +79,9 @@ class Stage(object):
           return True
     return False
 
+  def is_startable(self):
+    return all(i.ready() for i in self.inputs())
+
   def is_finished(self):
     return all(o.ready() for o in self.outputs())
 
@@ -202,9 +205,10 @@ class BuildStage(Stage):
 
     return tasks
 
-
-from google.appengine.ext import db
-from db_objects import TestResults
+try:
+  from db_objects import TestResults
+except ImportError:
+  TestResults = None
 
 class TestResultsUploadedObject:
   def __init__(self, path):

@@ -11,24 +11,7 @@ except:
   import json as simplejson
 import urllib2
 
-try:
-  from google.appengine.api import memcache
-except ImportError:
-  class FakeMemcache(dict):
-    def set(self, key, value, time):
-      self[key] = value
-
-    def get(self, key):
-      try:
-        return self[key]
-      except KeyError:
-        return None
-
-    def delete(self, key):
-      if key in self:
-        del self[key]
-
-  memcache = FakeMemcache()
+from cache import CACHE
 
 from helpers import *
 from libcloud_gae import ResourceNotFoundError
@@ -47,7 +30,7 @@ class GCEObject(dict):
   def __getattr__(self, key):
     return self[key]
 
-  # For pickle and memcache
+  # For pickle and CACHE
   def __setstate__(self, state):
     self.__dict__ = state
 
@@ -88,7 +71,7 @@ class GCEObject(dict):
         pass
 
     obj = cls(name, sentinal=cls._sentinal)
-    cached = memcache.get(obj._cache_key())
+    cached = CACHE.get(obj._cache_key())
     if cached:
       obj.update(cached)
 
@@ -99,7 +82,7 @@ class GCEObject(dict):
     return obj
 
   def store(self):
-    memcache.set(self._cache_key(), self, time=12000)
+    CACHE.set(self._cache_key(), self, time=12000)
 
   def __init__(self, name, sentinal=None):
     assert sentinal is self._sentinal
@@ -125,7 +108,7 @@ class GCEObject(dict):
       self._gce_obj_destory(driver, self._gce_obj_get(driver, self.name))
     except ResourceNotFoundError:
       pass
-    memcache.delete(self._cache_key())
+    CACHE.delete(self._cache_key())
 
 
 class Disk(GCEObject):

@@ -11,9 +11,11 @@ except ImportError:
   def print_color(*args, **kw):
     print(*args, **kw)
 
+from cache import CACHE
+
 import threading
 PRINT_LOCK = threading.RLock()
-
+import time
 import sys
 mainThread = threading.currentThread()
 def info(type, value, tb):
@@ -141,7 +143,7 @@ class Updater(threading.Thread):
         self.ready = True
         with PRINT_LOCK:
           if old_nodes != nodes or old_volumes != volumes or old_snapshots != snapshots:
-            print("="*80+'\n', time.time(), "Finish updating gce\n", pprint.pformat(memcache), '\n'+"="*80+'\n')
+            print("="*80+'\n', time.time(), "Finish updating gce\n", pprint.pformat(CACHE), '\n'+"="*80+'\n')
           old_nodes = nodes
           old_volumes = volumes
           old_snapshots = snapshots
@@ -160,6 +162,15 @@ try:
     print("-"*80)
     for t in SyncStage(previous_commit, current_commit).tasklets:
       pretty_print_status(t)
+
+    import current_stages
+    start_time = time.time()
+    stage_list = current_stages.get_current_stages()
+    print("Took %s to create %s stages" % (time.time() - start_time, len(stage_list)))
+    start_time = time.time()
+    for stage in stage_list:
+        stage.is_finished() and stage.is_startable()
+    print("Took %s to poll %s stages" % (time.time() - start_time, len(stage_list)))
 
     if raw_input("okay? [y] ") not in ('y', ''):
       raise Exception("User aborted")
