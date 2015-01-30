@@ -99,7 +99,3 @@ class TestResultsHandler(webapp2.RequestHandler):
 
     self.response.write(result)
 
-
-APP = webapp2.WSGIApplication([
-  ('/test_results/.*', TestResultsHandler)
-], debug=True)

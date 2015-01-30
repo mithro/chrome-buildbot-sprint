@@ -15,8 +15,3 @@ class ClearTimersHandler(webapp2.RequestHandler):
     for timer in TaskletTimer.query():
       self.response.write(' - %s<br>' % timer.tid())
       timer.key.delete()
-
-
-APP = webapp2.WSGIApplication([
-  ('/clear_timers/?', ClearTimersHandler),
-], debug=True)

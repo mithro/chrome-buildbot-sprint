@@ -31,7 +31,7 @@ def get_exception():
     traceback.print_exc(file=f)
     return f.getvalue()
 
-class MainHandler(webapp2.RequestHandler):
+class StageStatusHandler(webapp2.RequestHandler):
     def get(self, stage_type, previous_commit, current_commit):
         stage = getattr(stages, '%sStage' % stage_type.title())(previous_commit, current_commit)
         errors = []
@@ -52,7 +52,7 @@ class MainHandler(webapp2.RequestHandler):
             current_commit=current_commit)
             )
 
-class CleanupHandler(webapp2.RequestHandler):
+class StageCleanupHandler(webapp2.RequestHandler):
     def get(self, stage_type, previous_commit, current_commit):
         self.response.headers.add_header('Content-Type', 'text/plain')
         stage = getattr(stages, '%sStage' % stage_type.title())(previous_commit, current_commit)
@@ -60,7 +60,3 @@ class CleanupHandler(webapp2.RequestHandler):
         driver = libcloud_gae.new_driver()
         stage.cleanup(driver)
 
-APP = webapp2.WSGIApplication([
-    ('/stage/(.*)/previous-(.*)/current-(.*)', MainHandler),
-    ('/cleanup/(.*)/previous-(.*)/current-(.*)', CleanupHandler)
-], debug=True)

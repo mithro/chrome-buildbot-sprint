@@ -39,8 +39,3 @@ class RunStagesHandler(webapp2.RequestHandler):
     if things_started:
       logging.debug(things_started)
     self.response.out.write(TEMPLATE % ''.join(' - %s\n' % thing for thing in things_started))
-
-
-APP = webapp2.WSGIApplication([
-  ('/run_stages/?', RunStagesHandler),
-], debug=True)

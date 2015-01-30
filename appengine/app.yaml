@@ -12,35 +12,8 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
-- url: /poll_gce/.*
-  script: poll_gce.APP
-
-- url: /callback(/.*)?
-  script: callback.APP
-
-- url: /stage(/.*)
-  script: stage_status.APP
-
-- url: /cleanup(/.*)
-  script: stage_status.APP
-
-- url: /run_stages/?
-  script: run_stages.APP
-
-- url: /test_results/.*
-  script: test_results.APP
-
-- url: /view_stages/?
-  script: view_stages.APP
-
-- url: /timeline/?
-  script: timeline.APP
-
-- url: /clear_timers/?
-  script: clear_timers.APP
-
 - url: /.*
-  script: printenv.APP
+  script: main.APP
 
 libraries:
 - name: ssl

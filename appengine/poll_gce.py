@@ -147,10 +147,3 @@ class ReadMemcacheEntityHandler(webapp2.RequestHandler):
     )
 
     self.response.write(result)
-
-APP = webapp2.WSGIApplication([
-  ('/poll_gce/schedule', ScheduleHandler),
-  ('/poll_gce/do', PollGceHandler),
-  ('/poll_gce/memcache/\w+:.*', ReadMemcacheEntityHandler),
-  ('/poll_gce/.*', ReadMemcacheHandler),
-], debug=True)

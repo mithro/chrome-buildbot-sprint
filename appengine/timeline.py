@@ -42,7 +42,3 @@ class TimelineHandler(webapp2.RequestHandler):
       'view_hours': VIEW_HOURS,
     })
 
-
-APP = webapp2.WSGIApplication([
-  ('/timeline/?', TimelineHandler),
-], debug=True)

@@ -56,8 +56,3 @@ class CallbackHandler(webapp2.RequestHandler):
       logging.warn(instance_name)
       logging.warn(handler)
     self.response.write(result)
-
-
-APP = webapp2.WSGIApplication([
-  ('/callback/?', CallbackHandler),
-], debug=True)

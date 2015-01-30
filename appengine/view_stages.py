@@ -23,6 +23,3 @@ class ViewStagesHandler(webapp2.RequestHandler):
       )
     )
 
-APP = webapp2.WSGIApplication([
-  ('/view_stages/?', ViewStagesHandler),
-], debug=True)
