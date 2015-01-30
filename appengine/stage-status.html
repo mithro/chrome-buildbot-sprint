@@ -11,11 +11,7 @@ vim: set ts=4 sw=4 et sts=4 ai syn=htmldjango:
 
 table, td, th {
  padding: 5px;
- border: 1px solid black;
-}
-
-pre {
- overflow-x: scroll;
+ border: 0;
 }
 
 </style>
@@ -26,9 +22,9 @@ pre {
         <hr>
     {% endif %}
     <h1>{{ stage.stage_id }}</h1>
-    <p><pre>{{previous_commit}} -&gt; {{current_commit}}</pre></p>
+    <p><tt>{{previous_commit}} -&gt; {{current_commit}}</tt></p>
 
-    <table border=1>
+    <table>
         <tr>
             <th>Task ID</th>
             <th>Startable</th>
@@ -47,7 +43,7 @@ pre {
             <td {% if task.is_finished() %}style='background-color: blue;'{%endif%}></td>
         </tr>
         {% endfor %}
-    </table>        
+    </table>
 
     <h2>Inputs</h2>
     <ul>
