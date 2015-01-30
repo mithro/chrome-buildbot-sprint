@@ -32,6 +32,7 @@ class CallbackHandler(webapp2.RequestHandler):
 
   def post(self):
     data = json.loads(self.request.get('data'))
+    logging.debug('TYPE: %s\nDATA: %s' % (data.get('type'), data))
     if data.get('type') != 'finished':
       self.response.write('IGNORED')
       return
