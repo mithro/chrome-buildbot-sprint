@@ -57,16 +57,19 @@ class Cache(dict):
   def __init__(self, parent=None):
     self.parent = parent
 
-  def set(self, key, value, time=None):
+  def set(self, key, value, time=None, temp=False):
+    if self.get(key) == value:
+      return
+
     self[key] = value
 
     # Set on parent also.
-    if self.parent:
+    if self.parent and not temp:
       self.parent.set(key, value, time)
 
   def get(self, key):
     # If we don't have the key, try and get it from the parent.
-    if not key in self and self.parent:
+    if key not in self and self.parent:
       v = self.parent.get(key)
       if v is not None:
         self[key] = v
