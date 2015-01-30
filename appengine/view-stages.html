@@ -13,7 +13,14 @@ iframe {
 }
 </style>
 
-Showing only stages currently in progress:<br>
+{% if experiment %}
+Experiment underway.<br>
+Elapsed: {{ experiment.elapsed_minutes() }}min<br>
+Remaining: {{ experiment.remaining_minutes() }}min<br>
+Stages currently in progress:<br>
 {% for stage in stages %}
   <iframe src="/stage/{{ stage.name }}/previous-{{ stage.previous_commit }}/current-{{ stage.current_commit }}"></iframe>
 {% endfor %}
+{% else %}
+No experiment underway, start a new experiment <a href="/start_experiment">here</a>.
+{% endif %}

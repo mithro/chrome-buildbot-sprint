@@ -84,7 +84,10 @@ class CreateDiskFromContentSnapshot(CreateXFromY):
     assert isinstance(destination_disk, Disk)
     # FIXME: Hacky hacks to find the closest past out snapshot.
     from current_stages import COMMIT_LIST
-    for commit in reversed(COMMIT_LIST[:COMMIT_LIST.index(current_commit)]):
+    for index, (commit, time) in enumerate(COMMIT_LIST):
+      if commit == current_commit:
+        break
+    for commit, _ in reversed(COMMIT_LIST[:index]):
       source_snapshot = Snapshot.load(SnapshotName(commit, content))
       if source_snapshot.ready():
         break
