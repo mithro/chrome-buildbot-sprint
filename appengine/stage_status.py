@@ -6,6 +6,7 @@
 import libcloud_gae
 
 import cgi
+import logging
 import os
 import sys
 
@@ -43,7 +44,13 @@ class StageStatusHandler(webapp2.RequestHandler):
                     continue
 
                 driver = libcloud_gae.new_driver()
-                t.run(driver)
+                try:
+                    t.run(driver)
+                except Exception, e:
+                    tb = get_exception()
+                    logging.warn(tb)
+                    errors.append(str(e))
+                    errors.append(t)
 
         self.response.out.write(TEMPLATE_STAGE.render(
             errors=errors,
