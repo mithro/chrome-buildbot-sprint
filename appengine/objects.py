@@ -59,7 +59,6 @@ class GCEObject(dict):
     self.name = gce_obj.name
     self.create_time = parse_time(gce_obj.extra['creationTimestamp'])
     self.status = self._gce_obj_status(gce_obj)
-    logging.debug('Updating %s status to %s.' % (self.name, self.status))
 
   # ---------------------------------
   _sentinal = []
@@ -80,7 +79,8 @@ class GCEObject(dict):
     if gce_obj:
       obj.update_from_gce(gce_obj)
 
-    obj.store()
+    if not cached or gce_obj:
+      obj.store()
     return obj
 
   def store(self):

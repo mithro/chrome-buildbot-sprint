@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+import logging
+
 """
 >>> CACHE.set("a", 1)
 >>> CACHE.get("a")
@@ -58,9 +60,6 @@ class Cache(dict):
     self.parent = parent
 
   def set(self, key, value, time=None, temp=False):
-    if self.get(key) == value:
-      return
-
     self[key] = value
 
     # Set on parent also.
@@ -90,6 +89,8 @@ class Cache(dict):
 try:
   from google.appengine.api import memcache
 except ImportError:
+  import logging
+  logging.warn('Falling back to fake memcache.')
   memcache = Cache(parent=None)
 
 CACHE = Cache(parent=memcache)
