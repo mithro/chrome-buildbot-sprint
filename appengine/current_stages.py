@@ -19,8 +19,7 @@ def get_current_stages():
 
   current_stages = []
   for current_commit, commit_time in COMMIT_LIST[1:]:
-    commit_interval = commit_time - COMMIT_LIST_START
-    if commit_interval > experiment.elapsed():
+    if commit_time - COMMIT_LIST_START > experiment.elapsed():
       break
     current_stages.append(stages.SyncStage(previous_commit, current_commit))
     current_stages.append(stages.BuildStage(None, current_commit))

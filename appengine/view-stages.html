@@ -23,7 +23,7 @@ iframe {
   {% endfor %}
 
   <h1>Other stages:</h1>
-  {% for stage in stages_other %}
+  {% for stage in stages_pending %}
     <a href="/stage/{{ stage.name }}/previous-{{ stage.previous_commit }}/current-{{ stage.current_commit }}">{{ stage.stage_id }}</a><br>
   {% endfor %}
 {% else %}

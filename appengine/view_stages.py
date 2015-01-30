@@ -14,24 +14,18 @@ TEMPLATE_STAGE = jinja2.Template(open(os.path.join(os.path.dirname(__file__), 'v
 
 class ViewStagesHandler(webapp2.RequestHandler):
   def get(self):
+    in_progress = []
+    pending = []
+    for stage in get_current_stages():
+      if not stage.is_finished():
+        if stage.is_startable():
+          in_progress.append(stage)
+        else:
+          pending.append(stage)
     self.response.out.write(
       TEMPLATE_STAGE.render(
         experiment=get_current_experiment(),
-        stages_in_progress=[
-          stage
-          for stage in get_current_stages()
-          if not stage.is_finished() and any(
-            tasklet.is_startable() or tasklet.is_running() or tasklet.is_finished()
-            for tasklet in stage.tasklets
-          )
-        ],
-        stages_other=[
-          stage
-          for stage in get_current_stages()
-          if stage.is_finished() or not any(
-            tasklet.is_startable() or tasklet.is_running() or tasklet.is_finished()
-            for tasklet in stage.tasklets
-          )
-        ],
+        stages_in_progress=in_progress,
+        stages_pending=pending,
       )
     )
