@@ -1,0 +1,11 @@
+{
+  "name": "chrome-buildbot-sprint",
+  "description": "A dynamic, browser-based visualization library.",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mithro/chrome-buildbot-sprint.git"
+  },
+  "dependencies": {
+    "vis": "git://github.com/almende/vis.git"
+  }
+}
