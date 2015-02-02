@@ -46,6 +46,24 @@ def special_update(current, key, value):
       current = current[p]
   current[key] = value
 
+def str_datetime(dt):
+  return '%s +0000' % dt
+
+def str_timedelta(td):
+  current_value = td.total_seconds()
+  current_unit = 's'
+  conversions = [
+    (60, 'mins'),
+    (60, ' hours'),
+    (24, ' days'),
+  ]
+  for division, unit in conversions:
+    if current_value < division:
+      break
+    current_value /= division
+    current_unit = unit
+  return '%.2f%s' % (current_value, current_unit)
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()

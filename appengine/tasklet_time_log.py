@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import logging
 
 from google.appengine.ext import ndb
@@ -20,8 +20,11 @@ class TaskletTimer(ndb.Model):
   def tid(self):
     return self.key.string_id()
 
+  def elapsed(self):
+    return datetime.utcnow() - self.start_time
+
   def stop(self):
-    stop_time = datetime.datetime.utcnow()
+    stop_time = datetime.utcnow()
     duration = TaskletDuration(
       tid=self.tid(),
       start_time=self.start_time,

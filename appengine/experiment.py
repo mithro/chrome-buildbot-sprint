@@ -14,13 +14,16 @@ class Experiment(ndb.Model):
   stop_time = ndb.DateTimeProperty(required=True)
 
   def elapsed(self):
-    return datetime.utcnow() - self.start_time
+    return min(datetime.utcnow() - self.start_time, self.stop_time - self.start_time)
+
+  def remaining(self):
+    return max(self.stop_time - datetime.utcnow(), timedelta(0))
 
   def elapsed_hours(self):
     return self.elapsed().total_seconds() / 3600
 
   def remaining_hours(self):
-    return (self.stop_time - datetime.utcnow()).total_seconds() / 3600
+    return self.remaining().total_seconds() / 3600
 
 
 def get_current_experiment():

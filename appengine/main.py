@@ -14,7 +14,11 @@ from stage_status import StageStatusHandler
 from test_results import TestResultsHandler
 from timeline import TimelineHandler
 from view_stages import ViewStagesHandler
-from start_experiment import StartExperimentHandler
+from experiment_handlers import (
+  StartExperimentHandler,
+  ViewExperimentsHandler,
+  ViewExperimentHandler,
+)
 
 
 APP = webapp2.WSGIApplication([
@@ -31,5 +35,8 @@ APP = webapp2.WSGIApplication([
   ('/timeline/?', TimelineHandler),
   ('/run_stages/?', RunStagesHandler),
   ('/view_stages/?', ViewStagesHandler),
+
   ('/start_experiment/?', StartExperimentHandler),
+  ('/view_experiments/?', ViewExperimentsHandler),
+  ('/view_experiment/(.*)', ViewExperimentHandler),
 ], debug=True)

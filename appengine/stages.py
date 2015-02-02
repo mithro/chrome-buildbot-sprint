@@ -39,6 +39,10 @@ class Stage(object):
       self.name,
     ])
 
+  @staticmethod
+  def commit_from_stage_id(sid):
+    return sid.split('-')[2]
+
   def __init__(self, previous_commit, current_commit):
     self.current_commit = current_commit
     self.previous_commit = previous_commit
