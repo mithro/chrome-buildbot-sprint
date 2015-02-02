@@ -22,6 +22,10 @@ from experiment_handlers import (
 
 
 APP = webapp2.WSGIApplication([
+  ('/start_experiment/?', StartExperimentHandler),
+  ('/view_experiments/?', ViewExperimentsHandler),
+  ('/view_experiment/(.*)', ViewExperimentHandler),
+
   ('/poll_gce/schedule', ScheduleHandler),
   ('/poll_gce/do', PollGceHandler),
   ('/poll_gce/memcache/\w+:.*', ReadMemcacheEntityHandler),
@@ -35,8 +39,4 @@ APP = webapp2.WSGIApplication([
   ('/timeline/?', TimelineHandler),
   ('/run_stages/?', RunStagesHandler),
   ('/view_stages/?', ViewStagesHandler),
-
-  ('/start_experiment/?', StartExperimentHandler),
-  ('/view_experiments/?', ViewExperimentsHandler),
-  ('/view_experiment/(.*)', ViewExperimentHandler),
 ], debug=True)
