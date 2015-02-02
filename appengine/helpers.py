@@ -47,7 +47,7 @@ def special_update(current, key, value):
   current[key] = value
 
 def str_datetime(dt):
-  return '%s +0000' % dt
+  return str(dt).replace(' ', 'T') + 'Z'
 
 def str_timedelta(td):
   current_value = td.total_seconds()

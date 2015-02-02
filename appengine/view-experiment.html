@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<script src="/third_party/vis/dist/vis.js"></script>
+<link href="/third_party/vis/dist/vis.css" type="text/css" rel="stylesheet"/>
+<style>
+.page-padding {
+  height: 400px;
+}
+</style>
+
+Experiment from {{ experiment.start_time }} to {{ experiment.stop_time }}.<br>
+Elapsed: {{ experiment.elapsed() | str_timedelta }}<br>
+Remaining: {{ experiment.remaining() | str_timedelta }}<br>
+<br>
+Experiment timeline:
+<div id="stageTimelineContainer"></div>
+<br>
+Selected stage timeline:
+<div id="taskletTimelineContainer"></div>
+<div class="page-padding"></div>
+
+<script>
+var stageTaskletItems = {{ stage_tasklet_items | json }};
+var stageItems = {{ stage_items | json }};
+
+var taskletTimeline = new vis.Timeline(taskletTimelineContainer);
+
+var stageTimeline = new vis.Timeline(stageTimelineContainer);
+stageTimeline.setItems(new vis.DataSet(stageItems));
+stageTimeline.on('select', function(event) {
+  var stage = stageTimeline.itemsData.get(event.items[0]).id;
+  taskletTimeline.setItems(new vis.DataSet(stageTaskletItems[stage]));
+  taskletTimeline.setGroups(new vis.DataSet([{id: stage, content: stage}]));
+  taskletTimeline.fit({animate: true});
+});
+</script>
