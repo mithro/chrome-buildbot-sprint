@@ -39,6 +39,19 @@ class Stage(object):
       self.name,
     ])
 
+  @staticmethod
+  def extract_stage_id(tid):
+    components = tid.split('-')
+    return ('-'.join(components[:4]), '-'.join(components[4:]))
+
+  @staticmethod
+  def extract_commit(sid):
+    return sid.split('-')[2]
+
+  @staticmethod
+  def extract_name(sid):
+    return sid.split('-')[3]
+
   def __init__(self, previous_commit, current_commit):
     self.current_commit = current_commit
     self.previous_commit = previous_commit

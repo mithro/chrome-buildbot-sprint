@@ -5,6 +5,9 @@ import types
 import os
 os.environ['HOME'] = '/FAKE_HOME'
 
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), 'third_party'))
+
 # The google library tries to write a file containing an auth token to a local
 # file. Map it to memory instead.
 from libcloud.common.google import GoogleBaseConnection

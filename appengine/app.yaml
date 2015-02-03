@@ -12,6 +12,13 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
+- url: /third_party/vis
+  static_dir: third_party/vis
+
+- url: /
+  static_files: index.html
+  upload: index\.html
+
 - url: /.*
   script: main.APP
 

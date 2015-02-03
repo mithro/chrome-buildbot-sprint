@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<script src="/third_party/vis/dist/vis.js"></script>
+<link href="/third_party/vis/dist/vis.css" type="text/css" rel="stylesheet"/>
+<style>
+.timeline-container {
+  width: calc(100vw - 50px);
+}
+.page-padding {
+  height: 400px;
+}
+.sync.group .item {
+  background-color: #DAF6D5;
+  border-color: #70CB74;
+}
+#taskletTimelineContainer .item {
+  background-color: #EEE;
+  border-color: #BBB;
+}
+</style>
+
+Experiment from {{ experiment.start_time }} to {{ experiment.stop_time }}.<br>
+Elapsed: {{ experiment.elapsed() | str_timedelta }}<br>
+Remaining: {{ experiment.remaining() | str_timedelta }}<br>
+<br>
+Experiment timeline:
+<div id="stageTimelineContainer" class="timeline-container"></div>
+<br>
+Selected stage timeline:
+<div id="taskletTimelineContainer" class="timeline-container"></div>
+<div class="page-padding"></div>
+
+<script>
+var stageItems = {{ stage_items | json }};
+var stageGroups = {{ stage_groups | json }};
+var stageTaskletItems = {{ stage_tasklet_items | json }};
+
+var taskletTimeline = new vis.Timeline(taskletTimelineContainer);
+
+var stageTimeline = new vis.Timeline(stageTimelineContainer);
+stageTimeline.setItems(new vis.DataSet(stageItems));
+stageTimeline.setGroups(new vis.DataSet(stageGroups));
+stageTimeline.on('select', function(event) {
+  var stage = stageTimeline.itemsData.get(event.items[0]).id;
+  taskletTimeline.setItems(new vis.DataSet(stageTaskletItems[stage]));
+  taskletTimeline.setGroups(new vis.DataSet([{id: stage, content: stage}]));
+  taskletTimeline.fit({animate: true});
+});
+</script>

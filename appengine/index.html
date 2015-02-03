@@ -1,0 +1,21 @@
+<h1>Chrome Buildbot Sprint</h1>
+This is a quick and hacky experimental implementation of an async commit queue pipeline running on GCE.<br>
+<h3>Actions</h3>
+<ul>
+  <li><a href="/start_experiment">Start new experiment</a></li>
+  <li><a href="/view_experiments">View past and current experiments</a></li>
+</ul>
+
+<h3>What is an experiment?</h3>
+<p>
+  An experiment puts the GAE waterfall through a 24 hour slice of commits from the Chromium repository (COMMIT_LIST in current_stages.py) as a simulation of a realistic workload.<br>
+  At the moment the waterfall is only capable of syncing to and building a commit.
+</p>
+
+<h3>What's left to implement?</h3>
+<ul>
+  <li>Linux tests</li>
+  <li>Windows sync, building & testing</li>
+  <li>CQ pipeline feed with rejection</li>
+  <li>Trybot style patch testing</li>
+</ul>
