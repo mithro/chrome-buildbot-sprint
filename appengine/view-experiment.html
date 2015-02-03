@@ -8,6 +8,14 @@
 .page-padding {
   height: 400px;
 }
+.sync.group .item {
+  background-color: #DAF6D5;
+  border-color: #70CB74;
+}
+#taskletTimelineContainer .item {
+  background-color: #EEE;
+  border-color: #BBB;
+}
 </style>
 
 Experiment from {{ experiment.start_time }} to {{ experiment.stop_time }}.<br>
@@ -22,13 +30,15 @@ Selected stage timeline:
 <div class="page-padding"></div>
 
 <script>
-var stageTaskletItems = {{ stage_tasklet_items | json }};
 var stageItems = {{ stage_items | json }};
+var stageGroups = {{ stage_groups | json }};
+var stageTaskletItems = {{ stage_tasklet_items | json }};
 
 var taskletTimeline = new vis.Timeline(taskletTimelineContainer);
 
 var stageTimeline = new vis.Timeline(stageTimelineContainer);
 stageTimeline.setItems(new vis.DataSet(stageItems));
+stageTimeline.setGroups(new vis.DataSet(stageGroups));
 stageTimeline.on('select', function(event) {
   var stage = stageTimeline.itemsData.get(event.items[0]).id;
   taskletTimeline.setItems(new vis.DataSet(stageTaskletItems[stage]));

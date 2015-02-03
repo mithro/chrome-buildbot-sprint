@@ -100,12 +100,19 @@ class ViewExperimentHandler(webapp2.RequestHandler):
       stage_tasklet_items.setdefault(item['group'], []).append(item)
     stage_items = [{
       'id': stage,
+      'group': stage.split('-')[0],
       'content': stage,
       'start': min(item['start'] for item in items),
       'end': max(item['end'] for item in items),
     } for stage, items in stage_tasklet_items.items()]
+    stage_groups = [{
+      'id': group,
+      'content': group,
+      'className': group,
+    } for group in {item['group'] for item in stage_items}]
     self.response.write(VIEW_EXPERIMENT_TEMPLATE.render({
       'experiment': experiment,
       'stage_items': stage_items,
+      'stage_groups': stage_groups,
       'stage_tasklet_items': stage_tasklet_items,
     }))
